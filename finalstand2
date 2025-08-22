@@ -350,6 +350,18 @@ torsoBtn.MouseButton1Click:Connect(function()
     torsoBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
 end)
 
+-- NEW: Add credit label at the bottom right corner
+local creditLabel = Instance.new("TextLabel")
+creditLabel.Size = UDim2.new(1, -10, 0, 15)
+creditLabel.Position = UDim2.new(0, 5, 1, -15)
+creditLabel.BackgroundTransparency = 1
+creditLabel.Text = "Made By Jae"
+creditLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+creditLabel.Font = Enum.Font.Gotham
+creditLabel.TextSize = 11
+creditLabel.TextXAlignment = Enum.TextXAlignment.Right
+creditLabel.Parent = contentFrame
+
 -- UI Toggle Functionality (with X key support) (ORIGINAL)
 toggleUIBtn.MouseButton1Click:Connect(function()
     uiVisible = not uiVisible
