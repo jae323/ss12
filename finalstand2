@@ -264,29 +264,35 @@ knobCorner.CornerRadius = UDim.new(1, 0)
 knobCorner.Parent = sliderKnob
 
 -- FIXED: Proper slider functionality
-local function updateSliderFromMouse()
-    local mouseX = UserInputService:GetMouseLocation().X
-    local sliderX = sliderTrack.AbsolutePosition.X
-    local sliderWidth = sliderTrack.AbsoluteSize.X
-    local relativeX = math.clamp(mouseX - sliderX, 0, sliderWidth)
-    
-    aimFOV = math.floor(20 + (relativeX/sliderWidth) * 280)
-    sliderFill.Size = UDim2.new((aimFOV - 20)/280, 0, 1, 0)
-    sliderKnob.Position = UDim2.new((aimFOV - 20)/280, -6, 0.5, -6)
-    sliderLabel.Text = "Aim FOV: " .. aimFOV
-    updateFOVCircle()
-end
-
 sliderTrack.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
         draggingSlider = true
-        updateSliderFromMouse()
+        
+        local mouseX = UserInputService:GetMouseLocation().X
+        local sliderX = sliderTrack.AbsolutePosition.X
+        local sliderWidth = sliderTrack.AbsoluteSize.X
+        local relativeX = math.clamp(mouseX - sliderX, 0, sliderWidth)
+        
+        aimFOV = math.floor(20 + (relativeX/sliderWidth) * 280)
+        sliderFill.Size = UDim2.new((aimFOV - 20)/280, 0, 1, 0)
+        sliderKnob.Position = UDim2.new((aimFOV - 20)/280, -6, 0.5, -6)
+        sliderLabel.Text = "Aim FOV: " .. aimFOV
+        updateFOVCircle()
     end
 end)
 
 UserInputService.InputChanged:Connect(function(input)
     if draggingSlider and input.UserInputType == Enum.UserInputType.MouseMovement then
-        updateSliderFromMouse()
+        local mouseX = UserInputService:GetMouseLocation().X
+        local sliderX = sliderTrack.AbsolutePosition.X
+        local sliderWidth = sliderTrack.AbsoluteSize.X
+        local relativeX = math.clamp(mouseX - sliderX, 0, sliderWidth)
+        
+        aimFOV = math.floor(20 + (relativeX/sliderWidth) * 280)
+        sliderFill.Size = UDim2.new((aimFOV - 20)/280, 0, 1, 0)
+        sliderKnob.Position = UDim2.new((aimFOV - 20)/280, -6, 0.5, -6)
+        sliderLabel.Text = "Aim FOV: " .. aimFOV
+        updateFOVCircle()
     end
 end)
 
