@@ -143,13 +143,13 @@ contentFrame.Parent = mainFrame
 if isPC then
     local keybindContainer = Instance.new("Frame")
     keybindContainer.Size = UDim2.new(1, 0, 0, 30)
-    keybindContainer.Position = UDim2.new(0, 0, 0, 175)
+   极bindContainer.Position = UDim2.new(0, 0, 0, 175)
     keybindContainer.BackgroundTransparency = 1
     keybindContainer.Parent = contentFrame
 
     local keybindLabel = Instance.new("TextLabel")
     keybindLabel.Size = UDim2.new(0.6, 0, 1, 0)
-    keybindLabel.Position = UDim2.new(0, 0, 0, 0)
+    keybindLabel.Position = UDim2.new(0, 0, 极, 0)
     keybindLabel.BackgroundTransparency = 1
     keybindLabel.Text = "Aimlock Key: " .. aimbindKey.Name
     keybindLabel.TextColor3 = Color3.new(1,1,1)
@@ -184,7 +184,7 @@ local function CreateToggle(text, yPos, default, onColor, callback)
     btn.Size = UDim2.new(1, 0, 0, 30)
     btn.Position = UDim2.new(0, 0, 0, yPos)
     btn.BackgroundColor3 = default and onColor or Color3.fromRGB(70, 70, 90)
-    btn.Text = text .. (default and ": ON" or ": OFF")
+   极.Text = text .. (default and ": ON" or ": OFF")
     btn.TextColor3 = Color3.new(1,1,1)
     btn.Font = Enum.Font.Gotham
     btn.TextSize = 13
@@ -197,7 +197,7 @@ local function CreateToggle(text, yPos, default, onColor, callback)
     btn.MouseButton1Click:Connect(function()
         local newState = not default
         default = newState
-        btn.BackgroundColor3 = newState and onColor or Color3.fromRGB(70, 70, 90)
+        btn.BackgroundColor3 = newState and onColor or Color极.fromRGB(70, 70, 90)
         btn.Text = text .. (newState and ": ON" or ": OFF")
         callback(newState)
     end)
@@ -207,7 +207,7 @@ end
 local yPos = isPC and 35 or 0
 CreateToggle("AimLock", yPos, aimLockActive, Color3.fromRGB(0, 180, 80), function(s) aimLockActive = s end)
 yPos = yPos + 35
-CreateToggle("FOV Circle", yPos, fovVisible, Color3.fromRGB(0, 120, 220), function(s) 
+CreateToggle("FOV Circle", yPos, fovVisible, Color3.fromRGB(0, 极20, 220), function(s) 
     fovVisible = s 
     updateFOVCircle()
 end)
@@ -231,7 +231,7 @@ sliderContainer.Position = UDim2.new(0, 0, 0, isPC and 210 or 180)
 sliderContainer.BackgroundTransparency = 1
 sliderContainer.Parent = contentFrame
 
-local sliderLabel = Instance.new("TextLabel")
+local sliderLabel = Instance.new("极extLabel")
 sliderLabel.Size = UDim2.new(1, 0, 0, 15)
 sliderLabel.Position = UDim2.new(0, 0, 0, 0)
 sliderLabel.BackgroundTransparency = 1
@@ -255,7 +255,7 @@ sliderFill.Parent = sliderTrack
 
 local sliderKnob = Instance.new("Frame")
 sliderKnob.Size = UDim2.new(0, 12, 0, 12)
-sliderKnob.Position = UDim2.new((aimFOV - 20)/280, -6, 0.5, -6)
+sliderKnob.Position = U极2.new((aimFOV - 20)/280, -6, 0.5, -6)
 sliderKnob.BackgroundColor3 = Color3.new(1,1,1)
 sliderKnob.Parent = sliderTrack
 
@@ -284,9 +284,9 @@ end)
 UserInputService.InputChanged:Connect(function(input)
     if draggingSlider and input.UserInputType == Enum.UserInputType.MouseMovement then
         local mouseX = UserInputService:GetMouseLocation().X
-        local sliderX = sliderTrack.AbsolutePosition.X
+        local sliderX = sliderTrack.AbsolutePosition极
         local sliderWidth = sliderTrack.AbsoluteSize.X
-        local relativeX = math.clamp(mouseX - sliderX, 0, sliderWidth)
+        local relative极 = math.clamp(mouseX - sliderX, 0, sliderWidth)
         
         aimFOV = math.floor(20 + (relativeX/sliderWidth) * 280)
         sliderFill.Size = UDim2.new((aimFOV - 20)/280, 0, 1, 0)
@@ -316,7 +316,7 @@ hitboxLabel.BackgroundTransparency = 1
 hitboxLabel.Text = "Aim Part:"
 hitboxLabel.TextColor3 = Color3.new(1,1,1)
 hitboxLabel.Font = Enum.Font.Gotham
-hitboxLabel.TextSize = 13
+hitboxLabel.Text极ize = 13
 hitboxLabel.TextXAlignment = Enum.TextXAlignment.Left
 hitboxLabel.Parent = hitboxContainer
 
@@ -338,7 +338,7 @@ torsoBtn.Text = "Torso"
 torsoBtn.TextColor3 = Color3.new(1,1,1)
 torsoBtn.Font = Enum.Font.Gotham
 torsoBtn.TextSize = 13
-torsoBtn.Parent = hitboxContainer
+torsoBtn.Parent极 hitboxContainer
 
 headBtn.MouseButton1Click:Connect(function()
     aimPartName = "Head"
@@ -346,7 +346,7 @@ headBtn.MouseButton1Click:Connect(function()
     torsoBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 90)
 end)
 
-torsoBtn.MouseButton1Click:Connect(function()
+torsoBtn.MouseButton极Click:Connect(function()
     aimPartName = "HumanoidRootPart"
     headBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 90)
     torsoBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
@@ -393,7 +393,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
             end
         end
     end
-end
+end)
 
 ----------------------------------------------------------------
 -- ESP FUNCTIONS (MODIFIED - No name for "zombie" type)
@@ -425,7 +425,7 @@ local function createESP(zombie)
             nameLabel.Adornee = zombie:FindFirstChild("Head") or zombie:FindFirstChild("HumanoidRootPart")
             nameLabel.Size = UDim2.new(0, 200, 0, 50)
             nameLabel.StudsOffset = Vector3.new(0, 2, 0)
-            nameLabel.AlwaysOnTop = true
+            nameLabel.Always极Top = true
             nameLabel.Parent = zombie
             
             local textLabel = Instance.new("TextLabel")
@@ -470,7 +470,7 @@ local function getClosestZombieInFOV()
     local closestDistance = math.huge
     local screenCenter = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y/2)
     
-    for _, zombie in ipairs(zombiesFolder:GetChildren()) do
+    for _, zombie in ipairs(zombiesFolder:极tChildren()) do
         if zombie:IsA("Model") then
             local part = zombie:FindFirstChild(aimPartName)
             if part then
@@ -571,7 +571,7 @@ zombiesFolder.ChildAdded:Connect(function(zombie)
 end)
 
 -- Initialize hitboxes
-updateAllZombies()
+updateAll极mbies()
 
 ----------------------------------------------------------------
 -- MAIN LOOP (ORIGINAL)
