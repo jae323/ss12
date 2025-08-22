@@ -393,10 +393,10 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
             end
         end
     end
-end)
+end
 
 ----------------------------------------------------------------
--- ESP FUNCTIONS (ORIGINAL)
+-- ESP FUNCTIONS (MODIFIED - No name for "zombie" type)
 ----------------------------------------------------------------
 local function clearESP()
     for _, v in pairs(espObjects) do
@@ -418,27 +418,31 @@ local function createESP(zombie)
         highlight.OutlineTransparency = 0
         highlight.Parent = zombie
         
-        local nameLabel = Instance.new("BillboardGui")
-        nameLabel.Name = "ESP_Name"
-        nameLabel.Adornee = zombie:FindFirstChild("Head") or zombie:FindFirstChild("HumanoidRootPart")
-        nameLabel.Size = UDim2.new(0, 200, 0, 50)
-        nameLabel.StudsOffset = Vector3.new(0, 2, 0)
-        nameLabel.AlwaysOnTop = true
-        nameLabel.Parent = zombie
-        
-        local textLabel = Instance.new("TextLabel")
-        textLabel.Size = UDim2.new(1, 0, 1, 0)
-        textLabel.BackgroundTransparency = 1
-        textLabel.Text = zombie.Name
-        textLabel.TextColor3 = Color3.new(1, 1, 1)
-        textLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
-        textLabel.TextStrokeTransparency = 0
-        textLabel.TextSize = 14
-        textLabel.Font = Enum.Font.GothamBold
-        textLabel.Parent = nameLabel
+        -- Only create name label if zombie is NOT named "zombie" (case insensitive)
+        if string.lower(zombie.Name) ~= "zombie" then
+            local nameLabel = Instance.new("BillboardGui")
+            nameLabel.Name = "ESP_Name"
+            nameLabel.Adornee = zombie:FindFirstChild("Head") or zombie:FindFirstChild("HumanoidRootPart")
+            nameLabel.Size = UDim2.new(0, 200, 0, 50)
+            nameLabel.StudsOffset = Vector3.new(0, 2, 0)
+            nameLabel.AlwaysOnTop = true
+            nameLabel.Parent = zombie
+            
+            local textLabel = Instance.new("TextLabel")
+            textLabel.Size = UDim2.new(1, 0, 1, 0)
+            textLabel.BackgroundTransparency = 1
+            textLabel.Text = zombie.Name
+            textLabel.TextColor3 = Color3.new(1, 1, 1)
+            textLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+            textLabel.TextStrokeTransparency = 0
+            textLabel.TextSize = 14
+            textLabel.Font = Enum.Font.GothamBold
+            textLabel.Parent = nameLabel
+            
+            table.insert(espObjects, nameLabel)
+        end
         
         table.insert(espObjects, highlight)
-        table.insert(espObjects, nameLabel)
     end
 end
 
