@@ -7,6 +7,11 @@ local UserInputService = game:GetService("UserInputService")
 local camera = workspace.CurrentCamera
 local player = Players.LocalPlayer
 
+-- Kiểm tra xem GUI đã tồn tại chưa để tránh tạo nhiều lần
+if game:GetService("CoreGui"):FindFirstChild("ZombieAimlockGUI") or player.PlayerGui:FindFirstChild("ZombieAimlockGUI") then
+    return -- Nếu đã tồn tại thì không tạo lại
+end
+
 -- NEW: Robust GUI initialization (ONLY CHANGE MADE TO THE SCRIPT)
 repeat task.wait() until player:IsDescendantOf(game) and player:FindFirstChild("PlayerGui")
 
@@ -263,19 +268,35 @@ local knobCorner = Instance.new("UICorner")
 knobCorner.CornerRadius = UDim.new(1, 0)
 knobCorner.Parent = sliderKnob
 
+-- Sửa lỗi FOV slider không kéo được
+local function updateFOVSlider()
+    sliderFill.Size = UDim2.new((aimFOV - 20)/280, 0, 1, 0)
+    sliderKnob.Position = UDim2.new((aimFOV - 20)/280, -6, 0.5, -6)
+    sliderLabel.Text = "Aim FOV: " .. aimFOV
+    updateFOVCircle()
+end
+
 sliderTrack.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
         draggingSlider = true
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if draggingSlider and input.UserInputType == Enum.UserInputType.MouseMovement then
         local mouseX = UserInputService:GetMouseLocation().X
         local sliderX = sliderTrack.AbsolutePosition.X
         local sliderWidth = sliderTrack.AbsoluteSize.X
         local relativeX = math.clamp(mouseX - sliderX, 0, sliderWidth)
         
         aimFOV = math.floor(20 + (relativeX/sliderWidth) * 280)
-        sliderFill.Size = UDim2.new((aimFOV - 20)/280, 0, 1, 0)
-        sliderKnob.Position = UDim2.new((aimFOV - 20)/280, -6, 0.5, -6)
-        sliderLabel.Text = "Aim FOV: " .. aimFOV
-        updateFOVCircle()
+        updateFOVSlider()
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        draggingSlider = false
     end
 end)
 
@@ -440,7 +461,7 @@ zombiesFolder.ChildAdded:Connect(function(child)
 end)
 
 ----------------------------------------------------------------
--- AIMBOT FUNCTIONS (ORIGINAL)
+-- AIMBOT FUNCTIONS (MODIFIED - Ignore SwampGiant)
 ----------------------------------------------------------------
 local function getClosestZombieInFOV()
     local closestZombie = nil
@@ -448,7 +469,8 @@ local function getClosestZombieInFOV()
     local screenCenter = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y/2)
     
     for _, zombie in ipairs(zombiesFolder:GetChildren()) do
-        if zombie:IsA("Model") then
+        -- Bỏ qua zombie có tên "SwampGiant"
+        if zombie:IsA("Model") and zombie.Name ~= "SwampGiant" then
             local part = zombie:FindFirstChild(aimPartName)
             if part then
                 local screenPos, onScreen = camera:WorldToViewportPoint(part.Position)
@@ -551,23 +573,9 @@ end)
 updateAllZombies()
 
 ----------------------------------------------------------------
--- MAIN LOOP (ORIGINAL)
+-- MAIN LOOP (MODIFIED - Fixed FOV dragging)
 ----------------------------------------------------------------
 RunService.RenderStepped:Connect(function()
-    -- Handle FOV slider dragging
-    if draggingSlider then
-        local mouseX = UserInputService:GetMouseLocation().X
-        local sliderX = sliderTrack.AbsolutePosition.X
-        local sliderWidth = sliderTrack.AbsoluteSize.X
-        local relativeX = math.clamp(mouseX - sliderX, 0, sliderWidth)
-        
-        aimFOV = math.floor(20 + (relativeX/sliderWidth) * 280)
-        sliderFill.Size = UDim2.new((aimFOV - 20)/280, 0, 1, 0)
-        sliderKnob.Position = UDim2.new((aimFOV - 20)/280, -6, 0.5, -6)
-        sliderLabel.Text = "Aim FOV: " .. aimFOV
-        updateFOVCircle()
-    end
-    
     -- Update FOV circle position and size
     updateFOVCircle()
     
