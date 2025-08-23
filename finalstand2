@@ -526,39 +526,73 @@ local function getClosestZombieInFOV()
 end
 
 ----------------------------------------------------------------
--- HITBOX FUNCTIONS (MODIFIED - Head no longer disappears)
+-- HITBOX FUNCTIONS (MODIFIED - Special handling for SniperZombie)
 ----------------------------------------------------------------
 local function expandHeadHitbox(zombie)
-    if zombie:IsA("Model") and zombie:FindFirstChild("Head") then
-        local head = zombie.Head
-        if head:IsA("BasePart") then
-            if not head:FindFirstChild("OriginalSize") then
-                local originalSize = Instance.new("Vector3Value")
-                originalSize.Name = "OriginalSize"
-                originalSize.Value = head.Size
-                originalSize.Parent = head
+    if zombie:IsA("Model") then
+        -- Special handling for SniperZombie - use HumanoidRootPart instead of Head
+        if zombie.Name == "SniperZombie" then
+            local rootPart = zombie:FindFirstChild("HumanoidRootPart")
+            if rootPart and rootPart:IsA("BasePart") then
+                if not rootPart:FindFirstChild("OriginalSize") then
+                    local originalSize = Instance.new("Vector3Value")
+                    originalSize.Name = "OriginalSize"
+                    originalSize.Value = rootPart.Size
+                    originalSize.Parent = rootPart
+                end
+                
+                rootPart.Size = Vector3.new(5, 5, 5)
+                rootPart.CanCollide = false
+                rootPart.Material = Enum.Material.ForceField
             end
-            
-            head.Size = Vector3.new(5, 5, 5)
-            head.CanCollide = false
-            head.Material = Enum.Material.ForceField
+        elseif zombie:FindFirstChild("Head") then
+            local head = zombie.Head
+            if head:IsA("BasePart") then
+                if not head:FindFirstChild("OriginalSize") then
+                    local originalSize = Instance.new("Vector3Value")
+                    originalSize.Name = "OriginalSize"
+                    originalSize.Value = head.Size
+                    originalSize.Parent = head
+                end
+                
+                head.Size = Vector3.new(5, 5, 5)
+                head.CanCollide = false
+                head.Material = Enum.Material.ForceField
+            end
         end
     end
 end
 
 local function resetHeadHitbox(zombie)
-    if zombie:IsA("Model") and zombie:FindFirstChild("Head") then
-        local head = zombie.Head
-        if head:IsA("BasePart") then
-            if head:FindFirstChild("OriginalSize") then
-                head.Size = head.OriginalSize.Value
-                head.CanCollide = true
-                head.Material = Enum.Material.Plastic
-                head.OriginalSize:Destroy()
-            else
-                head.Size = Vector3.new(1, 1, 1)
-                head.CanCollide = true
-                head.Material = Enum.Material.Plastic
+    if zombie:IsA("Model") then
+        -- Special handling for SniperZombie - reset HumanoidRootPart
+        if zombie.Name == "SniperZombie" then
+            local rootPart = zombie:FindFirstChild("HumanoidRootPart")
+            if rootPart and rootPart:IsA("BasePart") then
+                if rootPart:FindFirstChild("OriginalSize") then
+                    rootPart.Size = rootPart.OriginalSize.Value
+                    rootPart.CanCollide = true
+                    rootPart.Material = Enum.Material.Plastic
+                    rootPart.OriginalSize:Destroy()
+                else
+                    rootPart.Size = Vector3.new(2, 2, 1)
+                    rootPart.CanCollide = true
+                    rootPart.Material = Enum.Material.Plastic
+                end
+            end
+        elseif zombie:FindFirstChild("Head") then
+            local head = zombie.Head
+            if head:IsA("BasePart") then
+                if head:FindFirstChild("OriginalSize") then
+                    head.Size = head.OriginalSize.Value
+                    head.CanCollide = true
+                    head.Material = Enum.Material.Plastic
+                    head.OriginalSize:Destroy()
+                else
+                    head.Size = Vector3.new(1, 1, 1)
+                    head.CanCollide = true
+                    head.Material = Enum.Material.Plastic
+                end
             end
         end
     end
@@ -595,7 +629,13 @@ RunService.RenderStepped:Connect(function()
     if aimLockActive then
         local targetZombie = getClosestZombieInFOV()
         if targetZombie then
-            local targetPart = targetZombie[aimPartName]
+            -- Special handling for SniperZombie - use HumanoidRootPart instead of Head
+            local targetPartName = aimPartName
+            if targetZombie.Name == "SniperZombie" and aimPartName == "Head" then
+                targetPartName = "HumanoidRootPart"
+            end
+            
+            local targetPart = targetZombie[targetPartName]
             if targetPart then
                 camera.CFrame = CFrame.new(camera.CFrame.Position, targetPart.Position)
             end
