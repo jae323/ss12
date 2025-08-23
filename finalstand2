@@ -164,7 +164,7 @@ if isPC then
     keybindLabel.Parent = keybindContainer
 
     local keybindBtn = Instance.new("TextButton")
-    keybindBtn.Size = UDim2.new(0.35, 0, 1, 0)
+    keybindBtn.Size = UDim2.new(0.35, 0, 0, 25)
     keybindBtn.Position = UDim2.new(0.65, 0, 0, 0)
     keybindBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 90)
     keybindBtn.Text = "Change"
@@ -298,7 +298,7 @@ UserInputService.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
         draggingSlider = false
     end
-end)
+end
 
 -- Original Hitbox Selection (ORIGINAL)
 local hitboxContainer = Instance.new("Frame")
@@ -526,28 +526,45 @@ local function getClosestZombieInFOV()
 end
 
 ----------------------------------------------------------------
--- HITBOX FUNCTIONS (MODIFIED - Special handling for SniperZombie)
+-- HITBOX FUNCTIONS (MODIFIED - Special fix for SniperZombie head)
 ----------------------------------------------------------------
 local function expandHeadHitbox(zombie)
-    if zombie:IsA("Model") then
-        -- Special handling for SniperZombie - use HumanoidRootPart instead of Head
-        if zombie.Name == "SniperZombie" then
-            local rootPart = zombie:FindFirstChild("HumanoidRootPart")
-            if rootPart and rootPart:IsA("BasePart") then
-                if not rootPart:FindFirstChild("OriginalSize") then
-                    local originalSize = Instance.new("Vector3Value")
-                    originalSize.Name = "OriginalSize"
-                    originalSize.Value = rootPart.Size
-                    originalSize.Parent = rootPart
+    if zombie:IsA("Model") and zombie:FindFirstChild("Head") then
+        local head = zombie.Head
+        if head:IsA("BasePart") then
+            -- Special handling for SniperZombie - ensure head is properly positioned
+            if zombie.Name == "SniperZombie" then
+                -- Create a fake head part if the real head is problematic
+                if not zombie:FindFirstChild("FakeHead") then
+                    local fakeHead = Instance.new("Part")
+                    fakeHead.Name = "FakeHead"
+                    fakeHead.Size = Vector3.new(5, 5, 5)
+                    fakeHead.Transparency = 1
+                    fakeHead.CanCollide = false
+                    fakeHead.Anchored = false
+                    fakeHead.Parent = zombie
+                    
+                    -- Create a weld to attach the fake head to the real head
+                    local weld = Instance.new("Weld")
+                    weld.Part0 = head
+                    weld.Part1 = fakeHead
+                    weld.C0 = CFrame.new(0, 0, 0)
+                    weld.Parent = fakeHead
+                    
+                    -- Store reference to original head
+                    if not head:FindFirstChild("OriginalSize") then
+                        local originalSize = Instance.new("Vector3Value")
+                        originalSize.Name = "OriginalSize"
+                        originalSize.Value = head.Size
+                        originalSize.Parent = head
+                    end
+                    
+                    head.Size = Vector3.new(5, 5, 5)
+                    head.CanCollide = false
+                    head.Material = Enum.Material.ForceField
                 end
-                
-                rootPart.Size = Vector3.new(5, 5, 5)
-                rootPart.CanCollide = false
-                rootPart.Material = Enum.Material.ForceField
-            end
-        elseif zombie:FindFirstChild("Head") then
-            local head = zombie.Head
-            if head:IsA("BasePart") then
+            else
+                -- Normal zombies
                 if not head:FindFirstChild("OriginalSize") then
                     local originalSize = Instance.new("Vector3Value")
                     originalSize.Name = "OriginalSize"
@@ -565,19 +582,26 @@ end
 
 local function resetHeadHitbox(zombie)
     if zombie:IsA("Model") then
-        -- Special handling for SniperZombie - reset HumanoidRootPart
+        -- Special handling for SniperZombie
         if zombie.Name == "SniperZombie" then
-            local rootPart = zombie:FindFirstChild("HumanoidRootPart")
-            if rootPart and rootPart:IsA("BasePart") then
-                if rootPart:FindFirstChild("OriginalSize") then
-                    rootPart.Size = rootPart.OriginalSize.Value
-                    rootPart.CanCollide = true
-                    rootPart.Material = Enum.Material.Plastic
-                    rootPart.OriginalSize:Destroy()
+            -- Remove fake head if it exists
+            local fakeHead = zombie:FindFirstChild("FakeHead")
+            if fakeHead then
+                fakeHead:Destroy()
+            end
+            
+            -- Reset real head
+            local head = zombie:FindFirstChild("Head")
+            if head and head:IsA("BasePart") then
+                if head:FindFirstChild("OriginalSize") then
+                    head.Size = head.OriginalSize.Value
+                    head.CanCollide = true
+                    head.Material = Enum.Material.Plastic
+                    head.OriginalSize:Destroy()
                 else
-                    rootPart.Size = Vector3.new(2, 2, 1)
-                    rootPart.CanCollide = true
-                    rootPart.Material = Enum.Material.Plastic
+                    head.Size = Vector3.new(1, 1, 1)
+                    head.CanCollide = true
+                    head.Material = Enum.Material.Plastic
                 end
             end
         elseif zombie:FindFirstChild("Head") then
@@ -629,13 +653,7 @@ RunService.RenderStepped:Connect(function()
     if aimLockActive then
         local targetZombie = getClosestZombieInFOV()
         if targetZombie then
-            -- Special handling for SniperZombie - use HumanoidRootPart instead of Head
-            local targetPartName = aimPartName
-            if targetZombie.Name == "SniperZombie" and aimPartName == "Head" then
-                targetPartName = "HumanoidRootPart"
-            end
-            
-            local targetPart = targetZombie[targetPartName]
+            local targetPart = targetZombie[aimPartName]
             if targetPart then
                 camera.CFrame = CFrame.new(camera.CFrame.Position, targetPart.Position)
             end
