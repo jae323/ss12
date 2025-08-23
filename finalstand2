@@ -38,7 +38,7 @@ local function createSafeGUI()
             else
                 screenGui.Parent = game:GetService("CoreGui")
             end
-        })
+        end)
     end
     return screenGui
 end
@@ -164,7 +164,7 @@ if isPC then
     keybindLabel.Parent = keybindContainer
 
     local keybindBtn = Instance.new("TextButton")
-    keybindBtn.Size = UDim2.new(0.35, 0, 0, 25)
+    keybindBtn.Size = UDim2.new(0.35, 0, 1, 0)
     keybindBtn.Position = UDim2.new(0.65, 0, 0, 0)
     keybindBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 90)
     keybindBtn.Text = "Change"
@@ -298,7 +298,7 @@ UserInputService.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
         draggingSlider = false
     end
-end
+end)
 
 -- Original Hitbox Selection (ORIGINAL)
 local hitboxContainer = Instance.new("Frame")
@@ -526,39 +526,41 @@ local function getClosestZombieInFOV()
 end
 
 ----------------------------------------------------------------
--- HITBOX FUNCTIONS (MODIFIED - Keep original head, create expanded hitbox)
+-- HITBOX FUNCTIONS (MODIFIED - Invisible hitbox that doesn't affect the original head)
 ----------------------------------------------------------------
 local function expandHeadHitbox(zombie)
     if zombie:IsA("Model") and zombie:FindFirstChild("Head") then
         local head = zombie.Head
-        if head:IsA("BasePart") then
-            -- Don't modify the original head, create an invisible expanded hitbox instead
-            if not zombie:FindFirstChild("ExpandedHitbox") then
-                local expandedHitbox = Instance.new("Part")
-                expandedHitbox.Name = "ExpandedHitbox"
-                expandedHitbox.Size = Vector3.new(5, 5, 5)
-                expandedHitbox.Transparency = 1
-                expandedHitbox.CanCollide = false
-                expandedHitbox.Anchored = false
-                expandedHitbox.Parent = zombie
-                
-                -- Create a weld to attach the expanded hitbox to the head
-                local weld = Instance.new("Weld")
-                weld.Part0 = head
-                weld.Part1 = expandedHitbox
-                weld.C0 = CFrame.new(0, 0, 0)
-                weld.Parent = expandedHitbox
-            end
+        
+        -- Check if hitbox already exists
+        if not head:FindFirstChild("AimlockHitbox") then
+            -- Create an invisible hitbox part
+            local hitbox = Instance.new("Part")
+            hitbox.Name = "AimlockHitbox"
+            hitbox.Size = Vector3.new(5, 5, 5)
+            hitbox.Transparency = 1  -- Completely invisible
+            hitbox.CanCollide = false
+            hitbox.Anchored = false
+            hitbox.Massless = true
+            
+            -- Weld the hitbox to the head
+            local weld = Instance.new("Weld")
+            weld.Part0 = head
+            weld.Part1 = hitbox
+            weld.C0 = CFrame.new(0, 0, 0) -- Same position as head
+            weld.Parent = hitbox
+            
+            hitbox.Parent = head
         end
     end
 end
 
 local function resetHeadHitbox(zombie)
-    if zombie:IsA("Model") then
-        -- Remove expanded hitbox if it exists
-        local expandedHitbox = zombie:FindFirstChild("ExpandedHitbox")
-        if expandedHitbox then
-            expandedHitbox:Destroy()
+    if zombie:IsA("Model") and zombie:FindFirstChild("Head") then
+        local head = zombie.Head
+        local hitbox = head:FindFirstChild("AimlockHitbox")
+        if hitbox then
+            hitbox:Destroy()
         end
     end
 end
@@ -584,7 +586,7 @@ end)
 updateAllZombies()
 
 ----------------------------------------------------------------
--- MAIN LOOP (MODIFIED - Fixed FOV dragging)
+-- MAIN LOOP (MODIFIED - Fixed FOV dragging and hitbox targeting)
 ----------------------------------------------------------------
 RunService.RenderStepped:Connect(function()
     -- Update FOV circle position and size
@@ -594,8 +596,21 @@ RunService.RenderStepped:Connect(function()
     if aimLockActive then
         local targetZombie = getClosestZombieInFOV()
         if targetZombie then
-            -- Use expanded hitbox if available, otherwise use the original aim part
-            local targetPart = targetZombie:FindFirstChild("ExpandedHitbox") or targetZombie[aimPartName]
+            local targetPart = nil
+            
+            -- If hitbox is enabled and we're aiming for head, try to find the hitbox first
+            if hitboxEnabled and aimPartName == "Head" and targetZombie:FindFirstChild("Head") then
+                local head = targetZombie.Head
+                local hitbox = head:FindFirstChild("AimlockHitbox")
+                if hitbox then
+                    targetPart = hitbox
+                else
+                    targetPart = head
+                end
+            else
+                targetPart = targetZombie[aimPartName]
+            end
+            
             if targetPart then
                 camera.CFrame = CFrame.new(camera.CFrame.Position, targetPart.Position)
             end
