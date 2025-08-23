@@ -38,7 +38,7 @@ local function createSafeGUI()
             else
                 screenGui.Parent = game:GetService("CoreGui")
             end
-        end)
+        })
     end
     return screenGui
 end
@@ -526,55 +526,28 @@ local function getClosestZombieInFOV()
 end
 
 ----------------------------------------------------------------
--- HITBOX FUNCTIONS (MODIFIED - Special fix for SniperZombie head)
+-- HITBOX FUNCTIONS (MODIFIED - Keep original head, create expanded hitbox)
 ----------------------------------------------------------------
 local function expandHeadHitbox(zombie)
     if zombie:IsA("Model") and zombie:FindFirstChild("Head") then
         local head = zombie.Head
         if head:IsA("BasePart") then
-            -- Special handling for SniperZombie - ensure head is properly positioned
-            if zombie.Name == "SniperZombie" then
-                -- Create a fake head part if the real head is problematic
-                if not zombie:FindFirstChild("FakeHead") then
-                    local fakeHead = Instance.new("Part")
-                    fakeHead.Name = "FakeHead"
-                    fakeHead.Size = Vector3.new(5, 5, 5)
-                    fakeHead.Transparency = 1
-                    fakeHead.CanCollide = false
-                    fakeHead.Anchored = false
-                    fakeHead.Parent = zombie
-                    
-                    -- Create a weld to attach the fake head to the real head
-                    local weld = Instance.new("Weld")
-                    weld.Part0 = head
-                    weld.Part1 = fakeHead
-                    weld.C0 = CFrame.new(0, 0, 0)
-                    weld.Parent = fakeHead
-                    
-                    -- Store reference to original head
-                    if not head:FindFirstChild("OriginalSize") then
-                        local originalSize = Instance.new("Vector3Value")
-                        originalSize.Name = "OriginalSize"
-                        originalSize.Value = head.Size
-                        originalSize.Parent = head
-                    end
-                    
-                    head.Size = Vector3.new(5, 5, 5)
-                    head.CanCollide = false
-                    head.Material = Enum.Material.ForceField
-                end
-            else
-                -- Normal zombies
-                if not head:FindFirstChild("OriginalSize") then
-                    local originalSize = Instance.new("Vector3Value")
-                    originalSize.Name = "OriginalSize"
-                    originalSize.Value = head.Size
-                    originalSize.Parent = head
-                end
+            -- Don't modify the original head, create an invisible expanded hitbox instead
+            if not zombie:FindFirstChild("ExpandedHitbox") then
+                local expandedHitbox = Instance.new("Part")
+                expandedHitbox.Name = "ExpandedHitbox"
+                expandedHitbox.Size = Vector3.new(5, 5, 5)
+                expandedHitbox.Transparency = 1
+                expandedHitbox.CanCollide = false
+                expandedHitbox.Anchored = false
+                expandedHitbox.Parent = zombie
                 
-                head.Size = Vector3.new(5, 5, 5)
-                head.CanCollide = false
-                head.Material = Enum.Material.ForceField
+                -- Create a weld to attach the expanded hitbox to the head
+                local weld = Instance.new("Weld")
+                weld.Part0 = head
+                weld.Part1 = expandedHitbox
+                weld.C0 = CFrame.new(0, 0, 0)
+                weld.Parent = expandedHitbox
             end
         end
     end
@@ -582,42 +555,10 @@ end
 
 local function resetHeadHitbox(zombie)
     if zombie:IsA("Model") then
-        -- Special handling for SniperZombie
-        if zombie.Name == "SniperZombie" then
-            -- Remove fake head if it exists
-            local fakeHead = zombie:FindFirstChild("FakeHead")
-            if fakeHead then
-                fakeHead:Destroy()
-            end
-            
-            -- Reset real head
-            local head = zombie:FindFirstChild("Head")
-            if head and head:IsA("BasePart") then
-                if head:FindFirstChild("OriginalSize") then
-                    head.Size = head.OriginalSize.Value
-                    head.CanCollide = true
-                    head.Material = Enum.Material.Plastic
-                    head.OriginalSize:Destroy()
-                else
-                    head.Size = Vector3.new(1, 1, 1)
-                    head.CanCollide = true
-                    head.Material = Enum.Material.Plastic
-                end
-            end
-        elseif zombie:FindFirstChild("Head") then
-            local head = zombie.Head
-            if head:IsA("BasePart") then
-                if head:FindFirstChild("OriginalSize") then
-                    head.Size = head.OriginalSize.Value
-                    head.CanCollide = true
-                    head.Material = Enum.Material.Plastic
-                    head.OriginalSize:Destroy()
-                else
-                    head.Size = Vector3.new(1, 1, 1)
-                    head.CanCollide = true
-                    head.Material = Enum.Material.Plastic
-                end
-            end
+        -- Remove expanded hitbox if it exists
+        local expandedHitbox = zombie:FindFirstChild("ExpandedHitbox")
+        if expandedHitbox then
+            expandedHitbox:Destroy()
         end
     end
 end
@@ -653,7 +594,8 @@ RunService.RenderStepped:Connect(function()
     if aimLockActive then
         local targetZombie = getClosestZombieInFOV()
         if targetZombie then
-            local targetPart = targetZombie[aimPartName]
+            -- Use expanded hitbox if available, otherwise use the original aim part
+            local targetPart = targetZombie:FindFirstChild("ExpandedHitbox") or targetZombie[aimPartName]
             if targetPart then
                 camera.CFrame = CFrame.new(camera.CFrame.Position, targetPart.Position)
             end
