@@ -526,41 +526,42 @@ local function getClosestZombieInFOV()
 end
 
 ----------------------------------------------------------------
--- HITBOX FUNCTIONS (MODIFIED - Invisible hitbox that doesn't affect the original head)
+-- HITBOX FUNCTIONS (MODIFIED - Only apply to sniperzombie)
 ----------------------------------------------------------------
 local function expandHeadHitbox(zombie)
-    if zombie:IsA("Model") and zombie:FindFirstChild("Head") then
+    -- Only apply hitbox expansion to sniperzombie
+    if zombie:IsA("Model") and zombie.Name == "sniperzombie" and zombie:FindFirstChild("Head") then
         local head = zombie.Head
-        
-        -- Check if hitbox already exists
-        if not head:FindFirstChild("AimlockHitbox") then
-            -- Create an invisible hitbox part
-            local hitbox = Instance.new("Part")
-            hitbox.Name = "AimlockHitbox"
-            hitbox.Size = Vector3.new(5, 5, 5)
-            hitbox.Transparency = 1  -- Completely invisible
-            hitbox.CanCollide = false
-            hitbox.Anchored = false
-            hitbox.Massless = true
+        if head:IsA("BasePart") then
+            if not head:FindFirstChild("OriginalSize") then
+                local originalSize = Instance.new("Vector3Value")
+                originalSize.Name = "OriginalSize"
+                originalSize.Value = head.Size
+                originalSize.Parent = head
+            end
             
-            -- Weld the hitbox to the head
-            local weld = Instance.new("Weld")
-            weld.Part0 = head
-            weld.Part1 = hitbox
-            weld.C0 = CFrame.new(0, 0, 0) -- Same position as head
-            weld.Parent = hitbox
-            
-            hitbox.Parent = head
+            head.Size = Vector3.new(5, 5, 5)
+            head.CanCollide = false
+            head.Material = Enum.Material.ForceField
         end
     end
 end
 
 local function resetHeadHitbox(zombie)
-    if zombie:IsA("Model") and zombie:FindFirstChild("Head") then
+    -- Only reset hitbox for sniperzombie
+    if zombie:IsA("Model") and zombie.Name == "sniperzombie" and zombie:FindFirstChild("Head") then
         local head = zombie.Head
-        local hitbox = head:FindFirstChild("AimlockHitbox")
-        if hitbox then
-            hitbox:Destroy()
+        if head:IsA("BasePart") then
+            if head:FindFirstChild("OriginalSize") then
+                head.Size = head.OriginalSize.Value
+                head.CanCollide = true
+                head.Material = Enum.Material.Plastic
+                head.OriginalSize:Destroy()
+            else
+                head.Size = Vector3.new(1, 1, 1)
+                head.CanCollide = true
+                head.Material = Enum.Material.Plastic
+            end
         end
     end
 end
@@ -586,7 +587,7 @@ end)
 updateAllZombies()
 
 ----------------------------------------------------------------
--- MAIN LOOP (MODIFIED - Fixed FOV dragging and hitbox targeting)
+-- MAIN LOOP (MODIFIED - Fixed FOV dragging)
 ----------------------------------------------------------------
 RunService.RenderStepped:Connect(function()
     -- Update FOV circle position and size
@@ -596,21 +597,7 @@ RunService.RenderStepped:Connect(function()
     if aimLockActive then
         local targetZombie = getClosestZombieInFOV()
         if targetZombie then
-            local targetPart = nil
-            
-            -- If hitbox is enabled and we're aiming for head, try to find the hitbox first
-            if hitboxEnabled and aimPartName == "Head" and targetZombie:FindFirstChild("Head") then
-                local head = targetZombie.Head
-                local hitbox = head:FindFirstChild("AimlockHitbox")
-                if hitbox then
-                    targetPart = hitbox
-                else
-                    targetPart = head
-                end
-            else
-                targetPart = targetZombie[aimPartName]
-            end
-            
+            local targetPart = targetZombie[aimPartName]
             if targetPart then
                 camera.CFrame = CFrame.new(camera.CFrame.Position, targetPart.Position)
             end
