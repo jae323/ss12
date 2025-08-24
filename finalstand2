@@ -1,5 +1,5 @@
 --// Ultimate Zombie Aimlock Script //--
---// Features: PC Keybind, Menu Toggle with X, Original Functionality, Auto-Fire //--
+--// Features: PC Keybind, Menu Toggle with X, Original Functionality, Auto-Fire Button //--
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -54,9 +54,13 @@ local waitingForKeybind = false
 
 -- Auto-fire variables (NEW)
 local autoFireActive = false
-local autoFireRate = 0.1 -- Time between shots in seconds
+local fireMode = "Hold" -- "Click" or "Hold"
+local clickDelay = 0.05 -- Delay between clicks in seconds
+local holdDelay = 0.1 -- Delay before starting to hold in seconds
 local lastFireTime = 0
+local isHolding = false
 local fireButton = nil
+local fireButtonVisible = true
 
 -- Original State (ORIGINAL)
 local aimLockActive = false
@@ -111,8 +115,8 @@ toggleCorner.Parent = toggleUIBtn
 
 -- Main Frame (ORIGINAL)
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 240, 0, isPC and 400 or 370) -- Increased height for auto-fire toggle
-mainFrame.Position = UDim2.new(0.5, -120, 0.5, -(isPC and 200 or 185))
+mainFrame.Size = UDim2.new(0, 240, 0, isPC and 470 or 440) -- Increased height for auto-fire settings
+mainFrame.Position = UDim2.new(0.5, -120, 0.5, -(isPC and 235 or 220))
 mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
 mainFrame.BorderSizePixel = 0
 mainFrame.Parent = screenGui
@@ -220,6 +224,9 @@ CreateToggle("AimLock", yPos, aimLockActive, Color3.fromRGB(0, 180, 80), functio
 yPos = yPos + 35
 CreateToggle("Auto Fire", yPos, autoFireActive, Color3.fromRGB(220, 50, 50), function(s) 
     autoFireActive = s 
+    if fireButton then
+        fireButton.Visible = fireButtonVisible and autoFireActive
+    end
 end)
 yPos = yPos + 35
 CreateToggle("FOV Circle", yPos, fovVisible, Color3.fromRGB(0, 120, 220), function(s) 
@@ -239,10 +246,132 @@ CreateToggle("Expand Hitbox", yPos, hitboxEnabled, Color3.fromRGB(160, 0, 160), 
     updateAllZombies() 
 end)
 
+-- NEW: Fire Mode Selection
+local fireModeContainer = Instance.new("Frame")
+fireModeContainer.Size = UDim2.new(1, 0, 0, 30)
+fireModeContainer.Position = UDim2.new(0, 0, 0, isPC and 245 or 215)
+fireModeContainer.BackgroundTransparency = 1
+fireModeContainer.Parent = contentFrame
+
+local fireModeLabel = Instance.new("TextLabel")
+fireModeLabel.Size = UDim2.new(1, 0, 0, 15)
+fireModeLabel.Position = UDim2.new(0, 0, 0, 0)
+fireModeLabel.BackgroundTransparency = 1
+fireModeLabel.Text = "Fire Mode:"
+fireModeLabel.TextColor3 = Color3.new(1,1,1)
+fireModeLabel.Font = Enum.Font.Gotham
+fireModeLabel.TextSize = 13
+fireModeLabel.TextXAlignment = Enum.TextXAlignment.Left
+fireModeLabel.Parent = fireModeContainer
+
+local clickBtn = Instance.new("TextButton")
+clickBtn.Size = UDim2.new(0.48, 0, 0, 25)
+clickBtn.Position = UDim2.new(0, 0, 0, 15)
+clickBtn.BackgroundColor3 = fireMode == "Click" and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(70, 70, 90)
+clickBtn.Text = "Click"
+clickBtn.TextColor3 = Color3.new(1,1,1)
+clickBtn.Font = Enum.Font.Gotham
+clickBtn.TextSize = 13
+clickBtn.Parent = fireModeContainer
+
+local holdBtn = Instance.new("TextButton")
+holdBtn.Size = UDim2.new(0.48, 0, 0, 25)
+holdBtn.Position = UDim2.new(0.52, 0, 0, 15)
+holdBtn.BackgroundColor3 = fireMode == "Hold" and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(70, 70, 90)
+holdBtn.Text = "Hold"
+holdBtn.TextColor3 = Color3.new(1,1,1)
+holdBtn.Font = Enum.Font.Gotham
+holdBtn.TextSize = 13
+holdBtn.Parent = fireModeContainer
+
+clickBtn.MouseButton1Click:Connect(function()
+    fireMode = "Click"
+    clickBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+    holdBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 90)
+end)
+
+holdBtn.MouseButton1Click:Connect(function()
+    fireMode = "Hold"
+    clickBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 90)
+    holdBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+end)
+
+-- NEW: Click Delay Slider
+local clickDelayContainer = Instance.new("Frame")
+clickDelayContainer.Size = UDim2.new(1, 0, 0, 40)
+clickDelayContainer.Position = UDim2.new(0, 0, 0, isPC and 280 or 250)
+clickDelayContainer.BackgroundTransparency = 1
+clickDelayContainer.Parent = contentFrame
+
+local clickDelayLabel = Instance.new("TextLabel")
+clickDelayLabel.Size = UDim2.new(1, 0, 0, 15)
+clickDelayLabel.Position = UDim2.new(0, 0, 0, 0)
+clickDelayLabel.BackgroundTransparency = 1
+clickDelayLabel.Text = "Click Delay: " .. string.format("%.2f", clickDelay) .. "s"
+clickDelayLabel.TextColor3 = Color3.new(1,1,1)
+clickDelayLabel.Font = Enum.Font.Gotham
+clickDelayLabel.TextSize = 13
+clickDelayLabel.TextXAlignment = Enum.TextXAlignment.Left
+clickDelayLabel.Parent = clickDelayContainer
+
+local clickDelayTrack = Instance.new("Frame")
+clickDelayTrack.Size = UDim2.new(1, 0, 0, 5)
+clickDelayTrack.Position = UDim2.new(0, 0, 0, 20)
+clickDelayTrack.BackgroundColor3 = Color3.fromRGB(70, 70, 90)
+clickDelayTrack.Parent = clickDelayContainer
+
+local clickDelayFill = Instance.new("Frame")
+clickDelayFill.Size = UDim2.new((clickDelay - 0.01)/0.2, 0, 1, 0)
+clickDelayFill.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+clickDelayFill.Parent = clickDelayTrack
+
+local clickDelayKnob = Instance.new("Frame")
+clickDelayKnob.Size = UDim2.new(0, 12, 0, 12)
+clickDelayKnob.Position = UDim2.new((clickDelay - 0.01)/0.2, -6, 0.5, -6)
+clickDelayKnob.BackgroundColor3 = Color3.new(1,1,1)
+clickDelayKnob.Parent = clickDelayTrack
+
+local clickDelayKnobCorner = Instance.new("UICorner")
+clickDelayKnobCorner.CornerRadius = UDim.new(1, 0)
+clickDelayKnobCorner.Parent = clickDelayKnob
+
+-- Click Delay Slider Functionality
+local draggingClickDelay = false
+
+local function updateClickDelaySlider()
+    clickDelayFill.Size = UDim2.new((clickDelay - 0.01)/0.2, 0, 1, 0)
+    clickDelayKnob.Position = UDim2.new((clickDelay - 0.01)/0.2, -6, 0.5, -6)
+    clickDelayLabel.Text = "Click Delay: " .. string.format("%.2f", clickDelay) .. "s"
+end
+
+clickDelayTrack.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        draggingClickDelay = true
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if draggingClickDelay and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local mouseX = UserInputService:GetMouseLocation().X
+        local sliderX = clickDelayTrack.AbsolutePosition.X
+        local sliderWidth = clickDelayTrack.AbsoluteSize.X
+        local relativeX = math.clamp(mouseX - sliderX, 0, sliderWidth)
+        
+        clickDelay = math.floor((0.01 + (relativeX/sliderWidth) * 0.2) * 100) / 100
+        updateClickDelaySlider()
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        draggingClickDelay = false
+    end
+end)
+
 -- Original FOV Slider (ORIGINAL)
 local sliderContainer = Instance.new("Frame")
 sliderContainer.Size = UDim2.new(1, 0, 0, 40)
-sliderContainer.Position = UDim2.new(0, 0, 0, isPC and 245 or 215)
+sliderContainer.Position = UDim2.new(0, 0, 0, isPC and 325 or 295)
 sliderContainer.BackgroundTransparency = 1
 sliderContainer.Parent = contentFrame
 
@@ -313,7 +442,7 @@ end)
 -- Original Hitbox Selection (ORIGINAL)
 local hitboxContainer = Instance.new("Frame")
 hitboxContainer.Size = UDim2.new(1, 0, 0, 30)
-hitboxContainer.Position = UDim2.new(0, 0, 0, isPC and 295 or 265)
+hitboxContainer.Position = UDim2.new(0, 0, 0, isPC and 370 or 340)
 hitboxContainer.BackgroundTransparency = 1
 hitboxContainer.Parent = contentFrame
 
@@ -371,6 +500,28 @@ creditLabel.Font = Enum.Font.Gotham
 creditLabel.TextSize = 11
 creditLabel.TextXAlignment = Enum.TextXAlignment.Right
 creditLabel.Parent = contentFrame
+
+-- NEW: Create auto-fire button
+fireButton = Instance.new("TextButton")
+fireButton.Size = UDim2.new(0, 80, 0, 80)
+fireButton.Position = UDim2.new(1, -90, 1, -90)
+fireButton.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+fireButton.BackgroundTransparency = 0.5
+fireButton.Text = "AUTO\nFIRE"
+fireButton.TextColor3 = Color3.new(1, 1, 1)
+fireButton.Font = Enum.Font.GothamBold
+fireButton.TextSize = 16
+fireButton.TextWrapped = true
+fireButton.Visible = autoFireActive
+fireButton.Parent = screenGui
+
+local fireCorner = Instance.new("UICorner")
+fireCorner.CornerRadius = UDim.new(1, 0)
+fireCorner.Parent = fireButton
+
+-- Make fire button draggable
+fireButton.Active = true
+fireButton.Draggable = true
 
 -- UI Toggle Functionality (with X key support) (ORIGINAL)
 toggleUIBtn.MouseButton1Click:Connect(function()
@@ -679,78 +830,52 @@ local function isTargetInCrosshair()
     return screenDistance <= 10
 end
 
-local function findFireButton()
-    -- Try to find the fire button in the game UI
-    local fireButton = nil
-    
-    -- Check PlayerGui first
-    local playerGui = player:FindFirstChild("PlayerGui")
-    if playerGui then
-        fireButton = findButtonRecursive(playerGui, {"Fire", "Shoot", "Attack"})
+local function fireWeapon()
+    -- Simulate mouse click to fire weapon
+    local mouse = player:GetMouse()
+    if fireMode == "Click" then
+        mouse.Button1Down:Fire()
+        task.wait(0.05)
+        mouse.Button1Up:Fire()
+    else -- Hold mode
+        if not isHolding then
+            mouse.Button1Down:Fire()
+            isHolding = true
+        end
     end
-    
-    -- Check CoreGui if not found in PlayerGui
-    if not fireButton then
-        local coreGui = game:GetService("CoreGui")
-        fireButton = findButtonRecursive(coreGui, {"Fire", "Shoot", "Attack"})
-    end
-    
-    return fireButton
 end
 
-local function findButtonRecursive(parent, keywords)
-    for _, child in ipairs(parent:GetChildren()) do
-        -- Check if this is a button with one of the keywords in its name or text
-        if child:IsA("TextButton") or child:IsA("ImageButton") then
-            local nameLower = child.Name:lower()
-            local textLower = child:IsA("TextButton") and child.Text:lower() or ""
-            
-            for _, keyword in ipairs(keywords) do
-                if nameLower:find(keyword:lower()) or textLower:find(keyword:lower()) then
-                    return child
-                end
-            end
-        end
-        
-        -- Recursively search children
-        local found = findButtonRecursive(child, keywords)
-        if found then
-            return found
-        end
-    end
-    
-    return nil
-end
-
-local function clickFireButton()
-    if not fireButton then
-        fireButton = findFireButton()
-    end
-    
-    if fireButton and fireButton:IsA("GuiObject") and fireButton.Visible then
-        -- Simulate a mouse click on the fire button
-        local success, error = pcall(function()
-            fireButton:FireEvent("MouseButton1Down")
-            task.wait(0.05)
-            fireButton:FireEvent("MouseButton1Up")
-        end)
-        
-        if not success then
-            warn("Failed to click fire button: " .. tostring(error))
-            fireButton = nil -- Reset to try to find it again next time
-        end
+local function stopFiring()
+    if isHolding then
+        local mouse = player:GetMouse()
+        mouse.Button1Up:Fire()
+        isHolding = false
     end
 end
 
 local function handleAutoFire()
     if autoFireActive and aimLockActive then
         local currentTime = tick()
-        if currentTime - lastFireTime >= autoFireRate then
-            if isTargetInCrosshair() then
-                clickFireButton()
-                lastFireTime = currentTime
+        
+        if isTargetInCrosshair() then
+            if fireMode == "Click" then
+                if currentTime - lastFireTime >= clickDelay then
+                    fireWeapon()
+                    lastFireTime = currentTime
+                end
+            else -- Hold mode
+                if not isHolding then
+                    if currentTime - lastFireTime >= holdDelay then
+                        fireWeapon()
+                        lastFireTime = currentTime
+                    end
+                end
             end
+        else
+            stopFiring()
         end
+    else
+        stopFiring()
     end
 end
 
