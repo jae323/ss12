@@ -1,6 +1,5 @@
 --// Ultimate Zombie Aimlock Script //--
 --// Features: PC Keybind, Menu Toggle with X, Original Functionality //--
---// Modified: ESP only shows names for special zombies (not regular "zombie") //--
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -52,6 +51,10 @@ local zombiesFolder = workspace:WaitForChild("Zombies")
 local isPC = false -- Will be set automatically
 local aimbindKey = Enum.KeyCode.Q -- Default keybind
 local waitingForKeybind = false
+
+-- NEW: E keybind for aimlock toggle
+local eKeyAimlockEnabled = false
+local eKeyAimlockActive = false
 
 -- Original State (ORIGINAL)
 local aimLockActive = false
@@ -106,8 +109,8 @@ toggleCorner.Parent = toggleUIBtn
 
 -- Main Frame (ORIGINAL)
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 240, 0, isPC and 370 or 340)
-mainFrame.Position = UDim2.new(0.5, -120, 0.5, -(isPC and 185 or 170))
+mainFrame.Size = UDim2.new(0, 240, 0, isPC and 400 or 370) -- Increased height for E key toggle
+mainFrame.Position = UDim2.new(0.5, -120, 0.5, -(isPC and 200 or 185)) -- Adjusted position
 mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
 mainFrame.BorderSizePixel = 0
 mainFrame.Parent = screenGui
@@ -230,10 +233,19 @@ CreateToggle("Expand Hitbox", yPos, hitboxEnabled, Color3.fromRGB(160, 0, 160), 
     updateAllZombies() 
 end)
 
+-- NEW: E Key Toggle for Aimlock
+yPos = yPos + 35
+CreateToggle("E Key Aimlock", yPos, eKeyAimlockEnabled, Color3.fromRGB(80, 180, 80), function(s) 
+    eKeyAimlockEnabled = s 
+    if not s then
+        eKeyAimlockActive = false
+    end
+end)
+
 -- Original FOV Slider (ORIGINAL)
 local sliderContainer = Instance.new("Frame")
 sliderContainer.Size = UDim2.new(1, 0, 0, 40)
-sliderContainer.Position = UDim2.new(0, 0, 0, isPC and 210 or 180)
+sliderContainer.Position = UDim2.new(0, 0, 0, isPC and 245 or 215) -- Adjusted position
 sliderContainer.BackgroundTransparency = 1
 sliderContainer.Parent = contentFrame
 
@@ -304,7 +316,7 @@ end)
 -- Original Hitbox Selection (ORIGINAL)
 local hitboxContainer = Instance.new("Frame")
 hitboxContainer.Size = UDim2.new(1, 0, 0, 30)
-hitboxContainer.Position = UDim2.new(0, 0, 0, isPC and 260 or 230)
+hitboxContainer.Position = UDim2.new(0, 0, 0, isPC and 295 or 265) -- Adjusted position
 hitboxContainer.BackgroundTransparency = 1
 hitboxContainer.Parent = contentFrame
 
@@ -378,6 +390,21 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
         toggleUIBtn.Text = uiVisible and "Hide UI [X]" or "Show UI [X]"
     end
     
+    -- NEW: E Key Toggle for Aimlock
+    if not gameProcessed and input.KeyCode == Enum.KeyCode.E and eKeyAimlockEnabled then
+        eKeyAimlockActive = not eKeyAimlockActive
+        -- Update the aimlock state
+        aimLockActive = eKeyAimlockActive
+        
+        -- Update toggle display
+        for _, v in pairs(screenGui:GetDescendants()) do
+            if v:IsA("TextButton") and v.Text:find("AimLock") then
+                v.Text = "AimLock: " .. (aimLockActive and "ON" or "OFF")
+                v.BackgroundColor3 = aimLockActive and Color3.fromRGB(0, 180, 80) or Color3.fromRGB(70, 70, 90)
+            end
+        end
+    end
+    
     -- Keybind handling for PC (ORIGINAL)
     if isPC then
         if waitingForKeybind then
@@ -429,7 +456,7 @@ local function createESP(zombie)
         highlight.OutlineTransparency = 0
         highlight.Parent = zombie
         
-        -- CHỈ HIỆN TÊN NẾU KHÔNG PHẢI LÀ ZOMBIE THƯỜNG (CHỈ CÓ TÊN "zombie")
+        -- Chỉ tạo nhãn tên nếu không phải là zombie thường
         if zombie.Name ~= "zombie" then
             local nameLabel = Instance.new("BillboardGui")
             nameLabel.Name = "ESP_Name"
