@@ -220,9 +220,6 @@ CreateToggle("AimLock", yPos, aimLockActive, Color3.fromRGB(0, 180, 80), functio
 yPos = yPos + 35
 CreateToggle("Auto Fire", yPos, autoFireActive, Color3.fromRGB(220, 50, 50), function(s) 
     autoFireActive = s 
-    if fireButton then
-        fireButton.Visible = not isPC and autoFireActive
-    end
 end)
 yPos = yPos + 35
 CreateToggle("FOV Circle", yPos, fovVisible, Color3.fromRGB(0, 120, 220), function(s) 
@@ -374,36 +371,6 @@ creditLabel.Font = Enum.Font.Gotham
 creditLabel.TextSize = 11
 creditLabel.TextXAlignment = Enum.TextXAlignment.Right
 creditLabel.Parent = contentFrame
-
--- NEW: Create fire button for mobile
-if not isPC then
-    fireButton = Instance.new("TextButton")
-    fireButton.Size = UDim2.new(0, 80, 0, 80)
-    fireButton.Position = UDim2.new(1, -90, 1, -90)
-    fireButton.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
-    fireButton.BackgroundTransparency = 0.5
-    fireButton.Text = "FIRE"
-    fireButton.TextColor3 = Color3.new(1, 1, 1)
-    fireButton.Font = Enum.Font.GothamBold
-    fireButton.TextSize = 16
-    fireButton.Visible = autoFireActive
-    fireButton.Parent = screenGui
-    
-    local fireCorner = Instance.new("UICorner")
-    fireCorner.CornerRadius = UDim.new(1, 0)
-    fireCorner.Parent = fireButton
-    
-    -- Make fire button draggable
-    fireButton.Active = true
-    fireButton.Draggable = true
-    
-    -- Fire when button is pressed
-    fireButton.MouseButton1Down:Connect(function()
-        if autoFireActive then
-            fireWeapon()
-        end
-    end)
-end
 
 -- UI Toggle Functionality (with X key support) (ORIGINAL)
 toggleUIBtn.MouseButton1Click:Connect(function()
@@ -712,12 +679,67 @@ local function isTargetInCrosshair()
     return screenDistance <= 10
 end
 
-local function fireWeapon()
-    -- Simulate mouse click to fire weapon
-    local mouse = player:GetMouse()
-    mouse.Button1Down:Fire()
-    task.wait(0.05)
-    mouse.Button1Up:Fire()
+local function findFireButton()
+    -- Try to find the fire button in the game UI
+    local fireButton = nil
+    
+    -- Check PlayerGui first
+    local playerGui = player:FindFirstChild("PlayerGui")
+    if playerGui then
+        fireButton = findButtonRecursive(playerGui, {"Fire", "Shoot", "Attack"})
+    end
+    
+    -- Check CoreGui if not found in PlayerGui
+    if not fireButton then
+        local coreGui = game:GetService("CoreGui")
+        fireButton = findButtonRecursive(coreGui, {"Fire", "Shoot", "Attack"})
+    end
+    
+    return fireButton
+end
+
+local function findButtonRecursive(parent, keywords)
+    for _, child in ipairs(parent:GetChildren()) do
+        -- Check if this is a button with one of the keywords in its name or text
+        if child:IsA("TextButton") or child:IsA("ImageButton") then
+            local nameLower = child.Name:lower()
+            local textLower = child:IsA("TextButton") and child.Text:lower() or ""
+            
+            for _, keyword in ipairs(keywords) do
+                if nameLower:find(keyword:lower()) or textLower:find(keyword:lower()) then
+                    return child
+                end
+            end
+        end
+        
+        -- Recursively search children
+        local found = findButtonRecursive(child, keywords)
+        if found then
+            return found
+        end
+    end
+    
+    return nil
+end
+
+local function clickFireButton()
+    if not fireButton then
+        fireButton = findFireButton()
+    end
+    
+    if fireButton and fireButton:IsA("GuiObject") and fireButton.Visible then
+        -- Simulate a mouse click on the fire button
+        local success, error = pcall(function()
+            fireButton:FireEvent("MouseButton1Down")
+            task.wait(0.05)
+            fireButton:FireEvent("MouseButton1Up")
+        end)
+        
+        if not success then
+            warn("Failed to click fire button: " .. tostring(error))
+            fireButton = nil -- Reset to try to find it again next time
+        end
+    end
 end
 
 local function handleAutoFire()
@@ -725,7 +747,7 @@ local function handleAutoFire()
         local currentTime = tick()
         if currentTime - lastFireTime >= autoFireRate then
             if isTargetInCrosshair() then
-                fireWeapon()
+                clickFireButton()
                 lastFireTime = currentTime
             end
         end
