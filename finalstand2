@@ -1,5 +1,5 @@
 --// Ultimate Zombie Aimlock Script //--
---// Features: PC Keybind, Menu Toggle with X, Original Functionality //--
+--// Features: PC Keybind, Menu Toggle with X, Original Functionality, Auto-Fire //--
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -51,6 +51,12 @@ local zombiesFolder = workspace:WaitForChild("Zombies")
 local isPC = false -- Will be set automatically
 local aimbindKey = Enum.KeyCode.Q -- Default keybind
 local waitingForKeybind = false
+
+-- Auto-fire variables (NEW)
+local autoFireActive = false
+local autoFireRate = 0.1 -- Time between shots in seconds
+local lastFireTime = 0
+local fireButton = nil
 
 -- Original State (ORIGINAL)
 local aimLockActive = false
@@ -105,8 +111,8 @@ toggleCorner.Parent = toggleUIBtn
 
 -- Main Frame (ORIGINAL)
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 240, 0, isPC and 370 or 340)
-mainFrame.Position = UDim2.new(0.5, -120, 0.5, -(isPC and 185 or 170))
+mainFrame.Size = UDim2.new(0, 240, 0, isPC and 400 or 370) -- Increased height for auto-fire toggle
+mainFrame.Position = UDim2.new(0.5, -120, 0.5, -(isPC and 200 or 185))
 mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
 mainFrame.BorderSizePixel = 0
 mainFrame.Parent = screenGui
@@ -212,6 +218,13 @@ end
 local yPos = isPC and 35 or 0
 CreateToggle("AimLock", yPos, aimLockActive, Color3.fromRGB(0, 180, 80), function(s) aimLockActive = s end)
 yPos = yPos + 35
+CreateToggle("Auto Fire", yPos, autoFireActive, Color3.fromRGB(220, 50, 50), function(s) 
+    autoFireActive = s 
+    if fireButton then
+        fireButton.Visible = not isPC and autoFireActive
+    end
+end)
+yPos = yPos + 35
 CreateToggle("FOV Circle", yPos, fovVisible, Color3.fromRGB(0, 120, 220), function(s) 
     fovVisible = s 
     updateFOVCircle()
@@ -232,7 +245,7 @@ end)
 -- Original FOV Slider (ORIGINAL)
 local sliderContainer = Instance.new("Frame")
 sliderContainer.Size = UDim2.new(1, 0, 0, 40)
-sliderContainer.Position = UDim2.new(0, 0, 0, isPC and 210 or 180)
+sliderContainer.Position = UDim2.new(0, 0, 0, isPC and 245 or 215)
 sliderContainer.BackgroundTransparency = 1
 sliderContainer.Parent = contentFrame
 
@@ -303,7 +316,7 @@ end)
 -- Original Hitbox Selection (ORIGINAL)
 local hitboxContainer = Instance.new("Frame")
 hitboxContainer.Size = UDim2.new(1, 0, 0, 30)
-hitboxContainer.Position = UDim2.new(0, 0, 0, isPC and 260 or 230)
+hitboxContainer.Position = UDim2.new(0, 0, 0, isPC and 295 or 265)
 hitboxContainer.BackgroundTransparency = 1
 hitboxContainer.Parent = contentFrame
 
@@ -361,6 +374,36 @@ creditLabel.Font = Enum.Font.Gotham
 creditLabel.TextSize = 11
 creditLabel.TextXAlignment = Enum.TextXAlignment.Right
 creditLabel.Parent = contentFrame
+
+-- NEW: Create fire button for mobile
+if not isPC then
+    fireButton = Instance.new("TextButton")
+    fireButton.Size = UDim2.new(0, 80, 0, 80)
+    fireButton.Position = UDim2.new(1, -90, 1, -90)
+    fireButton.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+    fireButton.BackgroundTransparency = 0.5
+    fireButton.Text = "FIRE"
+    fireButton.TextColor3 = Color3.new(1, 1, 1)
+    fireButton.Font = Enum.Font.GothamBold
+    fireButton.TextSize = 16
+    fireButton.Visible = autoFireActive
+    fireButton.Parent = screenGui
+    
+    local fireCorner = Instance.new("UICorner")
+    fireCorner.CornerRadius = UDim.new(1, 0)
+    fireCorner.Parent = fireButton
+    
+    -- Make fire button draggable
+    fireButton.Active = true
+    fireButton.Draggable = true
+    
+    -- Fire when button is pressed
+    fireButton.MouseButton1Down:Connect(function()
+        if autoFireActive then
+            fireWeapon()
+        end
+    end)
+end
 
 -- UI Toggle Functionality (with X key support) (ORIGINAL)
 toggleUIBtn.MouseButton1Click:Connect(function()
@@ -649,11 +692,55 @@ end)
 updateAllZombies()
 
 ----------------------------------------------------------------
+-- AUTO-FIRE FUNCTIONS (NEW)
+----------------------------------------------------------------
+local function isTargetInCrosshair()
+    if not aimLockActive then return false end
+    
+    local targetZombie = getClosestZombieInFOV()
+    if not targetZombie then return false end
+    
+    local targetPart = targetZombie:FindFirstChild(aimPartName)
+    if not targetPart then return false end
+    
+    -- Check if target is within a small radius of the crosshair center
+    local screenCenter = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y/2)
+    local screenPos = camera:WorldToViewportPoint(targetPart.Position)
+    local screenDistance = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
+    
+    -- Consider target in crosshair if it's within 10 pixels of center
+    return screenDistance <= 10
+end
+
+local function fireWeapon()
+    -- Simulate mouse click to fire weapon
+    local mouse = player:GetMouse()
+    mouse.Button1Down:Fire()
+    task.wait(0.05)
+    mouse.Button1Up:Fire()
+end
+
+local function handleAutoFire()
+    if autoFireActive and aimLockActive then
+        local currentTime = tick()
+        if currentTime - lastFireTime >= autoFireRate then
+            if isTargetInCrosshair() then
+                fireWeapon()
+                lastFireTime = currentTime
+            end
+        end
+    end
+end
+
+----------------------------------------------------------------
 -- MAIN LOOP (MODIFIED - Special targeting for sniper zombies)
 ----------------------------------------------------------------
 RunService.RenderStepped:Connect(function()
     -- Update FOV circle position and size
     updateFOVCircle()
+    
+    -- Handle auto-fire
+    handleAutoFire()
     
     -- Aimlock logic
     if aimLockActive then
