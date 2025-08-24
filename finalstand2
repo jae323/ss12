@@ -597,9 +597,9 @@ local function expandHeadHitbox(zombie)
                 originalSize.Parent = head
             end
             
-            -- Special larger hitbox for sniper zombies
+            -- Special hitbox for sniper zombies (4x4x4 as requested)
             if isSniperZombie(zombie) then
-                head.Size = Vector3.new(8, 8, 8)  -- Even larger for sniper zombies
+                head.Size = Vector3.new(4, 4, 4)  -- 4x4x4 for sniper zombies
             else
                 head.Size = Vector3.new(5, 5, 5)  -- Regular size for other zombies
             end
