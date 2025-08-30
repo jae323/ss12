@@ -65,6 +65,11 @@ local espVisible = false
 local wallCheckEnabled = true
 local hitboxEnabled = false
 
+-- NEW: Smooth Aim Settings
+local smoothAimEnabled = false
+local smoothAimFactor = 0.2 -- Default smoothness factor (lower = smoother)
+local draggingSmoothSlider = false
+
 -- ESP storage (ORIGINAL)
 local espObjects = {}
 
@@ -89,7 +94,7 @@ local function updateFOVCircle()
 end
 
 ----------------------------------------------------------------
--- GUI SYSTEM (ORIGINAL with protected parent)
+-- GUI SYSTEM (ORIGINAL with protected parent) - MODIFIED FOR SMOOTH AIM
 ----------------------------------------------------------------
 local mainFrame, toggleUIBtn
 
@@ -109,10 +114,10 @@ local function initializeMainGUI()
     toggleCorner.CornerRadius = UDim.new(0, 4)
     toggleCorner.Parent = toggleUIBtn
 
-    -- Main Frame (ORIGINAL)
+    -- Main Frame (MODIFIED: Increased height to accommodate smooth aim settings)
     mainFrame = Instance.new("Frame")
-    mainFrame.Size = UDim2.new(0, 240, 0, isPC and 370 or 340)
-    mainFrame.Position = UDim2.new(0.5, -120, 0.5, -(isPC and 185 or 170))
+    mainFrame.Size = UDim2.new(0, 240, 0, isPC and 430 or 400) -- Increased height
+    mainFrame.Position = UDim2.new(0.5, -120, 0.5, -(isPC and 215 or 200))
     mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
     mainFrame.BorderSizePixel = 0
     mainFrame.Parent = screenGui
@@ -154,7 +159,7 @@ local function initializeMainGUI()
     if isPC then
         local keybindContainer = Instance.new("Frame")
         keybindContainer.Size = UDim2.new(1, 0, 0, 30)
-        keybindContainer.Position = UDim2.new(0, 0, 0, 175)
+        keybindContainer.Position = UDim2.new(0, 0, 0, 235) -- Adjusted position
         keybindContainer.BackgroundTransparency = 1
         keybindContainer.Parent = contentFrame
 
@@ -220,6 +225,13 @@ local function initializeMainGUI()
     -- MODIFIED: Add [E] to the AimLock text to indicate the keybind
     CreateToggle("AimLock [E]", yPos, aimLockActive, Color3.fromRGB(0, 180, 80), function(s) aimLockActive = s end)
     yPos = yPos + 35
+    
+    -- NEW: Smooth Aim Toggle
+    CreateToggle("Smooth Aim", yPos, smoothAimEnabled, Color3.fromRGB(120, 0, 200), function(s) 
+        smoothAimEnabled = s 
+    end)
+    yPos = yPos + 35
+    
     CreateToggle("FOV Circle", yPos, fovVisible, Color3.fromRGB(0, 120, 220), function(s) 
         fovVisible = s 
         updateFOVCircle()
@@ -240,7 +252,7 @@ local function initializeMainGUI()
     -- Original FOV Slider (ORIGINAL)
     local sliderContainer = Instance.new("Frame")
     sliderContainer.Size = UDim2.new(1, 0, 0, 40)
-    sliderContainer.Position = UDim2.new(0, 0, 0, isPC and 210 or 180)
+    sliderContainer.Position = UDim2.new(0, 0, 0, isPC and 280 or 250) -- Adjusted position
     sliderContainer.BackgroundTransparency = 1
     sliderContainer.Parent = contentFrame
 
@@ -308,10 +320,79 @@ local function initializeMainGUI()
         end
     end)
 
+    -- NEW: Smooth Aim Slider
+    local smoothSliderContainer = Instance.new("Frame")
+    smoothSliderContainer.Size = UDim2.new(1, 0, 0, 40)
+    smoothSliderContainer.Position = UDim2.new(0, 0, 0, isPC and 330 or 300) -- Adjusted position
+    smoothSliderContainer.BackgroundTransparency = 1
+    smoothSliderContainer.Parent = contentFrame
+
+    local smoothSliderLabel = Instance.new("TextLabel")
+    smoothSliderLabel.Size = UDim2.new(1, 0, 0, 15)
+    smoothSliderLabel.Position = UDim2.new(0, 0, 0, 0)
+    smoothSliderLabel.BackgroundTransparency = 1
+    smoothSliderLabel.Text = "Smoothness: " .. string.format("%.2f", smoothAimFactor)
+    smoothSliderLabel.TextColor3 = Color3.new(1,1,1)
+    smoothSliderLabel.Font = Enum.Font.Gotham
+    smoothSliderLabel.TextSize = 13
+    smoothSliderLabel.TextXAlignment = Enum.TextXAlignment.Left
+    smoothSliderLabel.Parent = smoothSliderContainer
+
+    local smoothSliderTrack = Instance.new("Frame")
+    smoothSliderTrack.Size = UDim2.new(1, 0, 0, 5)
+    smoothSliderTrack.Position = UDim2.new(0, 0, 0, 20)
+    smoothSliderTrack.BackgroundColor3 = Color3.fromRGB(70, 70, 90)
+    smoothSliderTrack.Parent = smoothSliderContainer
+
+    local smoothSliderFill = Instance.new("Frame")
+    smoothSliderFill.Size = UDim2.new(smoothAimFactor, 0, 1, 0)
+    smoothSliderFill.BackgroundColor3 = Color3.fromRGB(120, 0, 200)
+    smoothSliderFill.Parent = smoothSliderTrack
+
+    local smoothSliderKnob = Instance.new("Frame")
+    smoothSliderKnob.Size = UDim2.new(0, 12, 0, 12)
+    smoothSliderKnob.Position = UDim2.new(smoothAimFactor, -6, 0.5, -6)
+    smoothSliderKnob.BackgroundColor3 = Color3.new(1,1,1)
+    smoothSliderKnob.Parent = smoothSliderTrack
+
+    local smoothKnobCorner = Instance.new("UICorner")
+    smoothKnobCorner.CornerRadius = UDim.new(1, 0)
+    smoothKnobCorner.Parent = smoothSliderKnob
+
+    local function updateSmoothSlider()
+        smoothSliderFill.Size = UDim2.new(smoothAimFactor, 0, 1, 0)
+        smoothSliderKnob.Position = UDim2.new(smoothAimFactor, -6, 0.5, -6)
+        smoothSliderLabel.Text = "Smoothness: " .. string.format("%.2f", smoothAimFactor)
+    end
+
+    smoothSliderTrack.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            draggingSmoothSlider = true
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if draggingSmoothSlider and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local mouseX = UserInputService:GetMouseLocation().X
+            local sliderX = smoothSliderTrack.AbsolutePosition.X
+            local sliderWidth = smoothSliderTrack.AbsoluteSize.X
+            local relativeX = math.clamp(mouseX - sliderX, 0, sliderWidth)
+            
+            smoothAimFactor = math.clamp(relativeX/sliderWidth, 0.05, 0.5)
+            updateSmoothSlider()
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            draggingSmoothSlider = false
+        end
+    end)
+
     -- Original Hitbox Selection (ORIGINAL)
     local hitboxContainer = Instance.new("Frame")
     hitboxContainer.Size = UDim2.new(1, 0, 0, 30)
-    hitboxContainer.Position = UDim2.new(0, 0, 0, isPC and 260 or 230)
+    hitboxContainer.Position = UDim2.new(0, 0, 0, isPC and 380 or 350) -- Adjusted position
     hitboxContainer.BackgroundTransparency = 1
     hitboxContainer.Parent = contentFrame
 
@@ -653,6 +734,20 @@ local function getSniperZombieRealPosition(zombie)
 end
 
 ----------------------------------------------------------------
+-- SMOOTH AIM FUNCTION (NEW)
+----------------------------------------------------------------
+local function smoothAim(targetPosition)
+    local currentCFrame = camera.CFrame
+    local targetCFrame = CFrame.new(currentCFrame.Position, targetPosition)
+    
+    -- Calculate the smooth transition
+    local smoothFactor = smoothAimFactor
+    local newCFrame = currentCFrame:Lerp(targetCFrame, smoothFactor)
+    
+    return newCFrame
+end
+
+----------------------------------------------------------------
 -- AIMBOT FUNCTIONS (MODIFIED - Special handling for sniper zombies)
 ----------------------------------------------------------------
 local function getClosestZombieInFOV()
@@ -800,7 +895,12 @@ RunService.RenderStepped:Connect(function()
                     targetPosition = getSniperZombieRealPosition(targetZombie)
                 end
                 
-                camera.CFrame = CFrame.new(camera.CFrame.Position, targetPosition)
+                -- Apply smooth aim if enabled
+                if smoothAimEnabled then
+                    camera.CFrame = smoothAim(targetPosition)
+                else
+                    camera.CFrame = CFrame.new(camera.CFrame.Position, targetPosition)
+                end
             end
         end
     end
