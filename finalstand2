@@ -385,29 +385,29 @@ local function initializeModernGUI()
     uiListLayout.Parent = contentFrame
 
     -- Toggles
-    createModernToggle(contentFrame, "AimLock [E]", 0, aimLockActive, function(s) 
+    local aimlockToggle = createModernToggle(contentFrame, "AimLock [E]", 0, aimLockActive, function(s) 
         aimLockActive = s 
     end)
     
-    createModernToggle(contentFrame, "Smooth Aim", 30, smoothAimEnabled, function(s) 
+    local smoothAimToggle = createModernToggle(contentFrame, "Smooth Aim", 30, smoothAimEnabled, function(s) 
         smoothAimEnabled = s 
     end)
     
-    createModernToggle(contentFrame, "FOV Circle", 60, fovVisible, function(s) 
+    local fovToggle = createModernToggle(contentFrame, "FOV Circle", 60, fovVisible, function(s) 
         fovVisible = s 
         updateFOVCircle()
     end)
     
-    createModernToggle(contentFrame, "Zombie ESP", 90, espVisible, function(s) 
+    local espToggle = createModernToggle(contentFrame, "Zombie ESP", 90, espVisible, function(s) 
         espVisible = s 
         updateESP() 
     end)
     
-    createModernToggle(contentFrame, "Wall Check", 120, wallCheckEnabled, function(s) 
+    local wallCheckToggle = createModernToggle(contentFrame, "Wall Check", 120, wallCheckEnabled, function(s) 
         wallCheckEnabled = s 
     end)
     
-    createModernToggle(contentFrame, "Expand Hitbox", 150, hitboxEnabled, function(s) 
+    local hitboxToggle = createModernToggle(contentFrame, "Expand Hitbox", 150, hitboxEnabled, function(s) 
         hitboxEnabled = s 
         updateAllZombies() 
     end)
@@ -515,21 +515,16 @@ local function initializeModernGUI()
             aimLockActive = not aimLockActive
             
             -- Update toggle display
-            for _, v in pairs(contentFrame:GetChildren()) do
-                if v:IsA("Frame") and v:FindFirstChild("TextLabel") and v.TextLabel.Text:find("AimLock") then
-                    local toggleFrame = v:FindFirstChildOfClass("Frame")
-                    if toggleFrame then
-                        local newState = aimLockActive
-                        local toggleKnob = toggleFrame:FindFirstChildOfClass("Frame")
-                        
-                        if toggleKnob then
-                            local tweenInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-                            local tween = TweenService:Create(toggleKnob, tweenInfo, {Position = UDim2.new(0, newState and 20 or 2, 0.5, -8)})
-                            tween:Play()
-                            
-                            toggleFrame.BackgroundColor3 = newState and colors.toggleOn or colors.toggleOff
-                        end
-                    end
+            local toggleFrame = aimlockToggle:FindFirstChildOfClass("Frame")
+            if toggleFrame then
+                local toggleKnob = toggleFrame:FindFirstChildOfClass("Frame")
+                
+                if toggleKnob then
+                    local tweenInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+                    local tween = TweenService:Create(toggleKnob, tweenInfo, {Position = UDim2.new(0, aimLockActive and 20 or 2, 0.5, -8)})
+                    tween:Play()
+                    
+                    toggleFrame.BackgroundColor3 = aimLockActive and colors.toggleOn or colors.toggleOff
                 end
             end
         end
@@ -556,21 +551,16 @@ local function initializeModernGUI()
             elseif input.KeyCode == aimbindKey then
                 aimLockActive = not aimLockActive
                 -- Update toggle display
-                for _, v in pairs(contentFrame:GetChildren()) do
-                    if v:IsA("Frame") and v:FindFirstChild("TextLabel") and v.TextLabel.Text:find("AimLock") then
-                        local toggleFrame = v:FindFirstChildOfClass("Frame")
-                        if toggleFrame then
-                            local newState = aimLockActive
-                            local toggleKnob = toggleFrame:FindFirstChildOfClass("Frame")
-                            
-                            if toggleKnob then
-                                local tweenInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-                                local tween = TweenService:Create(toggleKnob, tweenInfo, {Position = UDim2.new(0, newState and 20 or 2, 0.5, -8)})
-                                tween:Play()
-                                
-                                toggleFrame.BackgroundColor3 = newState and colors.toggleOn or colors.toggleOff
-                            end
-                        end
+                local toggleFrame = aimlockToggle:FindFirstChildOfClass("Frame")
+                if toggleFrame then
+                    local toggleKnob = toggleFrame:FindFirstChildOfClass("Frame")
+                    
+                    if toggleKnob then
+                        local tweenInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+                        local tween = TweenService:Create(toggleKnob, tweenInfo, {Position = UDim2.new(0, aimLockActive and 20 or 2, 0.5, -8)})
+                        tween:Play()
+                        
+                        toggleFrame.BackgroundColor3 = aimLockActive and colors.toggleOn or colors.toggleOff
                     end
                 end
             end
