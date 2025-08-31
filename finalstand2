@@ -66,6 +66,10 @@ local hitboxEnabled = false
 -- NEW: Smooth Aim Settings
 local smoothAimEnabled = false
 
+-- FOV Settings
+local fovVisible = false
+local aimFOV = 150
+
 -- ESP storage (ORIGINAL)
 local espObjects = {}
 
@@ -81,8 +85,26 @@ local colors = {
     toggleOn = Color3.fromRGB(0, 200, 100),
     toggleOff = Color3.fromRGB(80, 80, 100),
     button = Color3.fromRGB(45, 45, 60),
-    buttonHover = Color3.fromRGB(55, 55, 75)
+    buttonHover = Color3.fromRGB(55, 55, 75),
+    fov = Color3.fromRGB(0, 170, 255)
 }
+
+----------------------------------------------------------------
+-- FOV CIRCLE SYSTEM (ORIGINAL)
+----------------------------------------------------------------
+local fovCircle = Drawing.new("Circle")
+fovCircle.Visible = fovVisible
+fovCircle.Color = colors.fov
+fovCircle.Thickness = 2
+fovCircle.NumSides = 64
+fovCircle.Radius = aimFOV
+fovCircle.Filled = false
+
+local function updateFOVCircle()
+    fovCircle.Radius = aimFOV
+    fovCircle.Position = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y/2)
+    fovCircle.Visible = fovVisible
+end
 
 ----------------------------------------------------------------
 -- MODERN GUI SYSTEM
@@ -176,6 +198,93 @@ local function createModernToggle(parent, text, yPos, default, callback)
     return container
 end
 
+local function createSlider(parent, text, yPos, minValue, maxValue, currentValue, callback)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, 0, 0, 40)
+    container.Position = UDim2.new(0, 0, 0, yPos)
+    container.BackgroundTransparency = 1
+    container.Parent = parent
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 0, 15)
+    label.Position = UDim2.new(0, 0, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Text = text .. ": " .. currentValue
+    label.TextColor3 = colors.text
+    label.Font = Enum.Font.Gotham
+    label.TextSize = 13
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = container
+    
+    local sliderTrack = Instance.new("Frame")
+    sliderTrack.Size = UDim2.new(1, 0, 0, 5)
+    sliderTrack.Position = UDim2.new(0, 0, 0, 20)
+    sliderTrack.BackgroundColor3 = colors.button
+    sliderTrack.Parent = container
+    
+    local trackCorner = Instance.new("UICorner")
+    trackCorner.CornerRadius = UDim.new(1, 0)
+    trackCorner.Parent = sliderTrack
+    
+    local sliderFill = Instance.new("Frame")
+    sliderFill.Size = UDim2.new((currentValue - minValue)/(maxValue - minValue), 0, 1, 0)
+    sliderFill.BackgroundColor3 = colors.accent
+    sliderFill.Parent = sliderTrack
+    
+    local fillCorner = Instance.new("UICorner")
+    fillCorner.CornerRadius = UDim.new(1, 0)
+    fillCorner.Parent = sliderFill
+    
+    local sliderKnob = Instance.new("Frame")
+    sliderKnob.Size = UDim2.new(0, 12, 0, 12)
+    sliderKnob.Position = UDim2.new((currentValue - minValue)/(maxValue - minValue), -6, 0.5, -6)
+    sliderKnob.BackgroundColor3 = Color3.new(1, 1, 1)
+    sliderKnob.Parent = sliderTrack
+    
+    local knobCorner = Instance.new("UICorner")
+    knobCorner.CornerRadius = UDim.new(1, 0)
+    knobCorner.Parent = sliderKnob
+    
+    local dragging = false
+    
+    local function updateSlider(value)
+        local newValue = math.clamp(value, minValue, maxValue)
+        sliderFill.Size = UDim2.new((newValue - minValue)/(maxValue - minValue), 0, 1, 0)
+        sliderKnob.Position = UDim2.new((newValue - minValue)/(maxValue - minValue), -6, 0.5, -6)
+        label.Text = text .. ": " .. newValue
+        callback(newValue)
+    end
+    
+    sliderTrack.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            local mouseX = UserInputService:GetMouseLocation().X
+            local sliderX = sliderTrack.AbsolutePosition.X
+            local sliderWidth = sliderTrack.AbsoluteSize.X
+            local relativeX = math.clamp(mouseX - sliderX, 0, sliderWidth)
+            updateSlider(minValue + (relativeX/sliderWidth) * (maxValue - minValue))
+        end
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local mouseX = UserInputService:GetMouseLocation().X
+            local sliderX = sliderTrack.AbsolutePosition.X
+            local sliderWidth = sliderTrack.AbsoluteSize.X
+            local relativeX = math.clamp(mouseX - sliderX, 0, sliderWidth)
+            updateSlider(minValue + (relativeX/sliderWidth) * (maxValue - minValue))
+        end
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+    
+    return container
+end
+
 local function initializeModernGUI()
     -- UI Toggle Button
     toggleUIBtn = Instance.new("TextButton")
@@ -208,8 +317,8 @@ local function initializeModernGUI()
 
     -- Main Frame
     mainFrame = Instance.new("Frame")
-    mainFrame.Size = UDim2.new(0, 260, 0, 300)
-    mainFrame.Position = UDim2.new(0.5, -130, 0.5, -150)
+    mainFrame.Size = UDim2.new(0, 260, 0, 380)
+    mainFrame.Position = UDim2.new(0.5, -130, 0.5, -190)
     mainFrame.BackgroundColor3 = colors.background
     mainFrame.BorderSizePixel = 0
     mainFrame.Parent = screenGui
@@ -268,7 +377,7 @@ local function initializeModernGUI()
     contentFrame.BackgroundTransparency = 1
     contentFrame.BorderSizePixel = 0
     contentFrame.ScrollBarThickness = 4
-    contentFrame.CanvasSize = UDim2.new(0, 0, 0, 380)
+    contentFrame.CanvasSize = UDim2.new(0, 0, 0, 460)
     contentFrame.Parent = mainFrame
     
     local uiListLayout = Instance.new("UIListLayout")
@@ -284,24 +393,35 @@ local function initializeModernGUI()
         smoothAimEnabled = s 
     end)
     
-    createModernToggle(contentFrame, "Zombie ESP", 60, espVisible, function(s) 
+    createModernToggle(contentFrame, "FOV Circle", 60, fovVisible, function(s) 
+        fovVisible = s 
+        updateFOVCircle()
+    end)
+    
+    createModernToggle(contentFrame, "Zombie ESP", 90, espVisible, function(s) 
         espVisible = s 
         updateESP() 
     end)
     
-    createModernToggle(contentFrame, "Wall Check", 90, wallCheckEnabled, function(s) 
+    createModernToggle(contentFrame, "Wall Check", 120, wallCheckEnabled, function(s) 
         wallCheckEnabled = s 
     end)
     
-    createModernToggle(contentFrame, "Expand Hitbox", 120, hitboxEnabled, function(s) 
+    createModernToggle(contentFrame, "Expand Hitbox", 150, hitboxEnabled, function(s) 
         hitboxEnabled = s 
         updateAllZombies() 
+    end)
+
+    -- FOV Slider
+    createSlider(contentFrame, "Aim FOV", 190, 20, 300, aimFOV, function(value)
+        aimFOV = value
+        updateFOVCircle()
     end)
 
     -- Aim Part Selection
     local partContainer = Instance.new("Frame")
     partContainer.Size = UDim2.new(1, 0, 0, 40)
-    partContainer.Position = UDim2.new(0, 0, 0, 160)
+    partContainer.Position = UDim2.new(0, 0, 0, 240)
     partContainer.BackgroundTransparency = 1
     partContainer.Parent = contentFrame
     
@@ -336,7 +456,7 @@ local function initializeModernGUI()
     if isPC then
         local keybindContainer = Instance.new("Frame")
         keybindContainer.Size = UDim2.new(1, 0, 0, 40)
-        keybindContainer.Position = UDim2.new(0, 0, 0, 210)
+        keybindContainer.Position = UDim2.new(0, 0, 0, 290)
         keybindContainer.BackgroundTransparency = 1
         keybindContainer.Parent = contentFrame
         
@@ -688,9 +808,10 @@ local function getClosestZombieInFOV()
                 local screenPos, onScreen = camera:WorldToViewportPoint(targetPosition)
                 
                 if onScreen then
+                    local screenDistance = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
                     local worldDistance = (targetPosition - camera.CFrame.Position).Magnitude
                     
-                    if worldDistance < closestDistance then
+                    if screenDistance <= aimFOV and worldDistance < closestDistance then
                         -- MODIFIED: In SniperAimbot version, only target SniperZombies
                         if currentVersion == "SniperAimbot" and not isSniperZombie(zombie) then
                             -- Skip non-sniper zombies in SniperAimbot mode
@@ -798,6 +919,9 @@ updateAllZombies()
 -- MAIN LOOP (MODIFIED - Special targeting for sniper zombies)
 ----------------------------------------------------------------
 RunService.RenderStepped:Connect(function()
+    -- Update FOV circle position and size
+    updateFOVCircle()
+    
     -- Aimlock logic
     if aimLockActive then
         local targetZombie = getClosestZombieInFOV()
