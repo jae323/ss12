@@ -96,7 +96,7 @@ end
 ----------------------------------------------------------------
 -- MODERN GUI SYSTEM
 ----------------------------------------------------------------
-local mainFrame, toggleUIBtn, contentScrollingFrame
+local mainFrame, toggleUIBtn, contentScrollingFrame, versionFrame
 
 -- Colors
 local backgroundColor = Color3.fromRGB(30, 30, 40)
@@ -548,9 +548,9 @@ end
 
 -- Tạo GUI lựa chọn phiên bản phía dưới GUI chính
 local function createModernVersionSelectionGUI()
-    local versionFrame = Instance.new("Frame")
-    versionFrame.Size = UDim2.new(0, 180, 0, 110)
-    versionFrame.Position = UDim2.new(0, 10, 0, 50)
+    versionFrame = Instance.new("Frame")
+    versionFrame.Size = UDim2.new(0, 200, 0, 150)
+    versionFrame.Position = UDim2.new(0.5, -100, 0.5, 120)
     versionFrame.BackgroundColor3 = backgroundColor
     versionFrame.BorderSizePixel = 0
     versionFrame.Parent = screenGui
@@ -577,15 +577,17 @@ local function createModernVersionSelectionGUI()
     titleCorner.CornerRadius = UDim.new(0, 8)
     titleCorner.Parent = title
     
-    local buttonContainer = Instance.new("Frame")
-    buttonContainer.Size = UDim2.new(1, -10, 1, -35)
-    buttonContainer.Position = UDim2.new(0, 5, 0, 30)
-    buttonContainer.BackgroundTransparency = 1
-    buttonContainer.Parent = versionFrame
+    local buttonScrollingFrame = Instance.new("ScrollingFrame")
+    buttonScrollingFrame.Size = UDim2.new(1, -10, 1, -35)
+    buttonScrollingFrame.Position = UDim2.new(0, 5, 0, 30)
+    buttonScrollingFrame.BackgroundTransparency = 1
+    buttonScrollingFrame.ScrollBarThickness = 6
+    buttonScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, 100)
+    buttonScrollingFrame.Parent = versionFrame
     
     local buttonLayout = Instance.new("UIListLayout")
     buttonLayout.Padding = UDim.new(0, 5)
-    buttonLayout.Parent = buttonContainer
+    buttonLayout.Parent = buttonScrollingFrame
     
     -- Store button references for later updates
     local mainBtn, sniperBtn, ignoreWraithBtn
@@ -598,7 +600,7 @@ local function createModernVersionSelectionGUI()
     }
     
     mainBtn = createModernButton(
-        buttonContainer,
+        buttonScrollingFrame,
         "Main Gui",
         UDim2.new(1, 0, 0, 25),
         UDim2.new(0, 0, 0, 0),
@@ -620,7 +622,7 @@ local function createModernVersionSelectionGUI()
     mainBtn.BackgroundColor3 = currentVersion == "Main" and versionButtonColors.Main or buttonColor
     
     sniperBtn = createModernButton(
-        buttonContainer,
+        buttonScrollingFrame,
         "Only Sniperzombie",
         UDim2.new(1, 0, 0, 25),
         UDim2.new(0, 0, 0, 0),
@@ -642,7 +644,7 @@ local function createModernVersionSelectionGUI()
     sniperBtn.BackgroundColor3 = currentVersion == "OnlySniperzombie" and versionButtonColors.OnlySniperzombie or buttonColor
     
     ignoreWraithBtn = createModernButton(
-        buttonContainer,
+        buttonScrollingFrame,
         "Ignore Wraith",
         UDim2.new(1, 0, 0, 25),
         UDim2.new(0, 0, 0, 0),
@@ -663,12 +665,17 @@ local function createModernVersionSelectionGUI()
     )
     ignoreWraithBtn.BackgroundColor3 = currentVersion == "IgnoreWraith" and versionButtonColors.IgnoreWraith or buttonColor
     
+    -- Update canvas size
+    buttonLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        buttonScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, buttonLayout.AbsoluteContentSize.Y + 10)
+    end)
+    
     -- Nút Show/Hide cho GUI phiên bản
     local showVersionBtn = createModernButton(
         screenGui,
         "Hide Version",
         UDim2.new(0, 100, 0, 30),
-        UDim2.new(0, 10, 0, 170),
+        UDim2.new(0.5, -50, 0.5, 280),
         function()
             versionFrame.Visible = not versionFrame.Visible
             showVersionBtn.Text = versionFrame.Visible and "Hide Version" or "Show Version"
