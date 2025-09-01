@@ -67,6 +67,11 @@ local espVisible = false
 local wallCheckEnabled = true
 local hitboxEnabled = false
 
+-- NEW: Smooth aiming variables
+local smoothAimEnabled = false
+local smoothnessAmount = 1.0 -- Default smoothness
+local lastCameraCFrame = camera.CFrame
+
 -- ESP storage (ORIGINAL)
 local espObjects = {}
 
@@ -203,7 +208,7 @@ local function initializeModernGUI()
     
     -- Main Frame
     mainFrame = Instance.new("Frame")
-    mainFrame.Size = UDim2.new(0, 280, 0, 400)
+    mainFrame.Size = UDim2.new(0, 280, 0, 450)
     mainFrame.Position = UDim2.new(0.5, -140, 0.5, -200)
     mainFrame.BackgroundColor3 = backgroundColor
     mainFrame.BorderSizePixel = 0
@@ -261,7 +266,7 @@ local function initializeModernGUI()
     contentScrollingFrame.Position = UDim2.new(0, 5, 0, 40)
     contentScrollingFrame.BackgroundTransparency = 1
     contentScrollingFrame.ScrollBarThickness = 6
-    contentScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, 600)
+    contentScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, 650)
     contentScrollingFrame.Parent = mainFrame
     
     local contentLayout = Instance.new("UIListLayout")
@@ -274,6 +279,12 @@ local function initializeModernGUI()
     -- MODIFIED: Add [E] to the AimLock text to indicate the keybind
     local aimlockToggle = createToggleButton(contentScrollingFrame, "AimLock [E]", yPos, aimLockActive, successColor, function(s) 
         aimLockActive = s 
+    end)
+    yPos = yPos + 35
+    
+    -- NEW: Smooth Aim toggle
+    local smoothAimToggle = createToggleButton(contentScrollingFrame, "Smooth Aim", yPos, smoothAimEnabled, Color3.fromRGB(120, 0, 200), function(s) 
+        smoothAimEnabled = s 
     end)
     yPos = yPos + 35
     
@@ -299,6 +310,71 @@ local function initializeModernGUI()
         updateAllZombies() 
     end)
     yPos = yPos + 35
+    
+    -- NEW: Smoothness Selection
+    local smoothnessContainer = Instance.new("Frame")
+    smoothnessContainer.Size = UDim2.new(1, 0, 0, 40)
+    smoothnessContainer.Position = UDim2.new(0, 0, 0, yPos)
+    smoothnessContainer.BackgroundTransparency = 1
+    smoothnessContainer.Parent = contentScrollingFrame
+    
+    local smoothnessLabel = Instance.new("TextLabel")
+    smoothnessLabel.Size = UDim2.new(1, 0, 0, 20)
+    smoothnessLabel.Position = UDim2.new(0, 0, 0, 0)
+    smoothnessLabel.BackgroundTransparency = 1
+    smoothnessLabel.Text = "Smoothness: " .. smoothnessAmount
+    smoothnessLabel.TextColor3 = textColor
+    smoothnessLabel.Font = Enum.Font.Gotham
+    smoothnessLabel.TextSize = 13
+    smoothnessLabel.TextXAlignment = Enum.TextXAlignment.Left
+    smoothnessLabel.Parent = smoothnessContainer
+    
+    local smoothness05Btn = createModernButton(
+        smoothnessContainer,
+        "0.5",
+        UDim2.new(0.3, 0, 0, 25),
+        UDim2.new(0, 0, 0, 20),
+        function()
+            smoothnessAmount = 0.5
+            smoothnessLabel.Text = "Smoothness: " .. smoothnessAmount
+            smoothness05Btn.BackgroundColor3 = accentColor
+            smoothness10Btn.BackgroundColor3 = buttonColor
+            smoothness15Btn.BackgroundColor3 = buttonColor
+        end
+    )
+    smoothness05Btn.BackgroundColor3 = smoothnessAmount == 0.5 and accentColor or buttonColor
+    
+    local smoothness10Btn = createModernButton(
+        smoothnessContainer,
+        "1.0",
+        UDim2.new(0.3, 0, 0, 25),
+        UDim2.new(0.35, 0, 0, 20),
+        function()
+            smoothnessAmount = 1.0
+            smoothnessLabel.Text = "Smoothness: " .. smoothnessAmount
+            smoothness05Btn.BackgroundColor3 = buttonColor
+            smoothness10Btn.BackgroundColor3 = accentColor
+            smoothness15Btn.BackgroundColor3 = buttonColor
+        end
+    )
+    smoothness10Btn.BackgroundColor3 = smoothnessAmount == 1.0 and accentColor or buttonColor
+    
+    local smoothness15Btn = createModernButton(
+        smoothnessContainer,
+        "1.5",
+        UDim2.new(0.3, 0, 0, 25),
+        UDim2.new(0.7, 0, 0, 20),
+        function()
+            smoothnessAmount = 1.5
+            smoothnessLabel.Text = "Smoothness: " .. smoothnessAmount
+            smoothness05Btn.BackgroundColor3 = buttonColor
+            smoothness10Btn.BackgroundColor3 = buttonColor
+            smoothness15Btn.BackgroundColor3 = accentColor
+        end
+    )
+    smoothness15Btn.BackgroundColor3 = smoothnessAmount == 1.5 and accentColor or buttonColor
+    
+    yPos = yPos + 45
     
     -- FOV Slider
     local sliderContainer = Instance.new("Frame")
@@ -550,7 +626,7 @@ end
 local function createModernVersionSelectionGUI()
     versionFrame = Instance.new("Frame")
     versionFrame.Size = UDim2.new(0, 200, 0, 150)
-    versionFrame.Position = UDim2.new(0.5, -100, 0.5, 120)
+    versionFrame.Position = UDim2.new(0.5, -100, 0.5, 50)
     versionFrame.BackgroundColor3 = backgroundColor
     versionFrame.BorderSizePixel = 0
     versionFrame.Parent = screenGui
@@ -675,7 +751,7 @@ local function createModernVersionSelectionGUI()
         screenGui,
         "Hide Version",
         UDim2.new(0, 100, 0, 30),
-        UDim2.new(0.5, -50, 0.5, 280),
+        UDim2.new(0.5, -50, 0.5, 210),
         function()
             versionFrame.Visible = not versionFrame.Visible
             showVersionBtn.Text = versionFrame.Visible and "Hide Version" or "Show Version"
@@ -805,6 +881,28 @@ local function getSniperZombieRealPosition(zombie)
     
     -- Fallback: Return the visual position
     return zombie:GetPivot().Position
+end
+
+----------------------------------------------------------------
+-- SMOOTH AIMING FUNCTIONS (NEW)
+----------------------------------------------------------------
+local function smoothAim(targetPosition)
+    if not smoothAimEnabled then
+        camera.CFrame = CFrame.new(camera.CFrame.Position, targetPosition)
+        lastCameraCFrame = camera.CFrame
+        return
+    end
+    
+    local currentPosition = camera.CFrame.Position
+    local targetLookVector = (targetPosition - currentPosition).Unit
+    local targetCFrame = CFrame.new(currentPosition, currentPosition + targetLookVector)
+    
+    -- Apply smoothness
+    local smoothFactor = 1 / smoothnessAmount
+    local newCFrame = lastCameraCFrame:Lerp(targetCFrame, smoothFactor)
+    
+    camera.CFrame = newCFrame
+    lastCameraCFrame = newCFrame
 end
 
 ----------------------------------------------------------------
@@ -957,7 +1055,8 @@ RunService.RenderStepped:Connect(function()
                     targetPosition = getSniperZombieRealPosition(targetZombie)
                 end
                 
-                camera.CFrame = CFrame.new(camera.CFrame.Position, targetPosition)
+                -- Use smooth aiming
+                smoothAim(targetPosition)
             end
         end
     end
