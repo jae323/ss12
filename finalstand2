@@ -395,7 +395,10 @@ local function initializeModernGUI()
     hitboxLabel.TextXAlignment = Enum.TextXAlignment.Left
     hitboxLabel.Parent = hitboxContainer
     
-    local headBtn = createModernButton(
+    -- Store button references for later updates
+    local headBtn, torsoBtn
+    
+    headBtn = createModernButton(
         hitboxContainer,
         "Head",
         UDim2.new(0.48, 0, 0, 25),
@@ -408,7 +411,7 @@ local function initializeModernGUI()
     )
     headBtn.BackgroundColor3 = aimPartName == "Head" and accentColor or buttonColor
     
-    local torsoBtn = createModernButton(
+    torsoBtn = createModernButton(
         hitboxContainer,
         "Torso",
         UDim2.new(0.48, 0, 0, 25),
@@ -570,7 +573,10 @@ local function createModernVersionSelectionGUI()
     buttonContainer.BackgroundTransparency = 1
     buttonContainer.Parent = versionFrame
     
-    local mainBtn = createModernButton(
+    -- Store button references for later updates
+    local mainBtn, sniperBtn
+    
+    mainBtn = createModernButton(
         buttonContainer,
         "Main Gui",
         UDim2.new(0.48, 0, 1, 0),
@@ -591,7 +597,7 @@ local function createModernVersionSelectionGUI()
     )
     mainBtn.BackgroundColor3 = currentVersion == "Main" and accentColor or buttonColor
     
-    local sniperBtn = createModernButton(
+    sniperBtn = createModernButton(
         buttonContainer,
         "Sniper Aimbot",
         UDim2.new(0.48, 0, 1, 0),
