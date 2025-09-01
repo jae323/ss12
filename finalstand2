@@ -48,7 +48,7 @@ end
 local screenGui = createSafeGUI()
 
 -- Biến toàn cục để xác định phiên bản đang chạy
-local currentVersion = "Main" -- "Main" hoặc "SniperAimbot"
+local currentVersion = "Main" -- "Main", "OnlySniperzombie", or "IgnoreWraith"
 
 -- Config (ORIGINAL)
 local aimPartName = "Head"
@@ -72,6 +72,9 @@ local espObjects = {}
 
 -- Detect platform (ORIGINAL)
 isPC = UserInputService:GetPlatform() == Enum.Platform.Windows
+
+-- Store version button colors
+local versionButtonColors = {}
 
 ----------------------------------------------------------------
 -- FOV CIRCLE SYSTEM (ORIGINAL)
@@ -228,7 +231,7 @@ local function initializeModernGUI()
     titleText.Size = UDim2.new(1, -10, 1, 0)
     titleText.Position = UDim2.new(0, 10, 0, 0)
     titleText.BackgroundTransparency = 1
-    titleText.Text = currentVersion == "Main" and "ZOMBIE AIMLOCK" or "SNIPER AIMBOT"
+    titleText.Text = currentVersion == "Main" and "ZOMBIE AIMLOCK" or (currentVersion == "OnlySniperzombie" and "ONLY SNIPERZOMBIE" or "IGNORE WRAITH")
     titleText.TextColor3 = textColor
     titleText.Font = Enum.Font.GothamBold
     titleText.TextSize = 16
@@ -538,15 +541,22 @@ local function initializeModernGUI()
     end)
 end
 
+-- Function to generate a random color
+local function getRandomColor()
+    return Color3.new(math.random(), math.random(), math.random())
+end
+
 -- Tạo GUI lựa chọn phiên bản phía dưới GUI chính
 local function createModernVersionSelectionGUI()
     local versionFrame = Instance.new("Frame")
-    versionFrame.Size = UDim2.new(0, 240, 0, 60)
+    versionFrame.Size = UDim2.new(0, 180, 0, 110)
     versionFrame.Position = UDim2.new(0, 10, 0, 50)
     versionFrame.BackgroundColor3 = backgroundColor
     versionFrame.BorderSizePixel = 0
     versionFrame.Parent = screenGui
     versionFrame.Visible = true
+    versionFrame.Active = true
+    versionFrame.Draggable = true
     
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 8)
@@ -568,23 +578,35 @@ local function createModernVersionSelectionGUI()
     titleCorner.Parent = title
     
     local buttonContainer = Instance.new("Frame")
-    buttonContainer.Size = UDim2.new(1, -10, 0, 25)
+    buttonContainer.Size = UDim2.new(1, -10, 1, -35)
     buttonContainer.Position = UDim2.new(0, 5, 0, 30)
     buttonContainer.BackgroundTransparency = 1
     buttonContainer.Parent = versionFrame
     
+    local buttonLayout = Instance.new("UIListLayout")
+    buttonLayout.Padding = UDim.new(0, 5)
+    buttonLayout.Parent = buttonContainer
+    
     -- Store button references for later updates
-    local mainBtn, sniperBtn
+    local mainBtn, sniperBtn, ignoreWraithBtn
+    
+    -- Generate random colors for each version
+    versionButtonColors = {
+        Main = getRandomColor(),
+        OnlySniperzombie = getRandomColor(),
+        IgnoreWraith = getRandomColor()
+    }
     
     mainBtn = createModernButton(
         buttonContainer,
         "Main Gui",
-        UDim2.new(0.48, 0, 1, 0),
+        UDim2.new(1, 0, 0, 25),
         UDim2.new(0, 0, 0, 0),
         function()
             currentVersion = "Main"
-            mainBtn.BackgroundColor3 = accentColor
+            mainBtn.BackgroundColor3 = versionButtonColors.Main
             sniperBtn.BackgroundColor3 = buttonColor
+            ignoreWraithBtn.BackgroundColor3 = buttonColor
             
             -- Cập nhật tiêu đề
             if mainFrame and mainFrame:FindFirstChild("TitleBar") then
@@ -595,35 +617,58 @@ local function createModernVersionSelectionGUI()
             end
         end
     )
-    mainBtn.BackgroundColor3 = currentVersion == "Main" and accentColor or buttonColor
+    mainBtn.BackgroundColor3 = currentVersion == "Main" and versionButtonColors.Main or buttonColor
     
     sniperBtn = createModernButton(
         buttonContainer,
-        "Sniper Aimbot",
-        UDim2.new(0.48, 0, 1, 0),
-        UDim2.new(0.52, 0, 0, 0),
+        "Only Sniperzombie",
+        UDim2.new(1, 0, 0, 25),
+        UDim2.new(0, 0, 0, 0),
         function()
-            currentVersion = "SniperAimbot"
-            sniperBtn.BackgroundColor3 = warningColor
+            currentVersion = "OnlySniperzombie"
+            sniperBtn.BackgroundColor3 = versionButtonColors.OnlySniperzombie
             mainBtn.BackgroundColor3 = buttonColor
+            ignoreWraithBtn.BackgroundColor3 = buttonColor
             
             -- Cập nhật tiêu đề
             if mainFrame and mainFrame:FindFirstChild("TitleBar") then
                 local titleText = mainFrame.TitleBar:FindFirstChildOfClass("TextLabel")
                 if titleText then
-                    titleText.Text = "SNIPER AIMBOT"
+                    titleText.Text = "ONLY SNIPERZOMBIE"
                 end
             end
         end
     )
-    sniperBtn.BackgroundColor3 = currentVersion == "SniperAimbot" and warningColor or buttonColor
+    sniperBtn.BackgroundColor3 = currentVersion == "OnlySniperzombie" and versionButtonColors.OnlySniperzombie or buttonColor
+    
+    ignoreWraithBtn = createModernButton(
+        buttonContainer,
+        "Ignore Wraith",
+        UDim2.new(1, 0, 0, 25),
+        UDim2.new(0, 0, 0, 0),
+        function()
+            currentVersion = "IgnoreWraith"
+            ignoreWraithBtn.BackgroundColor3 = versionButtonColors.IgnoreWraith
+            mainBtn.BackgroundColor3 = buttonColor
+            sniperBtn.BackgroundColor3 = buttonColor
+            
+            -- Cập nhật tiêu đề
+            if mainFrame and mainFrame:FindFirstChild("TitleBar") then
+                local titleText = mainFrame.TitleBar:FindFirstChildOfClass("TextLabel")
+                if titleText then
+                    titleText.Text = "IGNORE WRAITH"
+                end
+            end
+        end
+    )
+    ignoreWraithBtn.BackgroundColor3 = currentVersion == "IgnoreWraith" and versionButtonColors.IgnoreWraith or buttonColor
     
     -- Nút Show/Hide cho GUI phiên bản
     local showVersionBtn = createModernButton(
         screenGui,
         "Hide Version",
         UDim2.new(0, 100, 0, 30),
-        UDim2.new(0, 10, 0, 120),
+        UDim2.new(0, 10, 0, 170),
         function()
             versionFrame.Visible = not versionFrame.Visible
             showVersionBtn.Text = versionFrame.Visible and "Hide Version" or "Show Version"
@@ -706,6 +751,11 @@ local function isSniperZombie(zombie)
     return zombie.Name:lower():find("sniper") or zombie.Name:lower():find("shooter")
 end
 
+local function isWraithZombie(zombie)
+    -- Check if this is a Wraith zombie by name
+    return zombie.Name:lower():find("wraith")
+end
+
 local function getSniperZombieRealPosition(zombie)
     -- Try to find the actual position of the sniper zombie
     -- This is a workaround for the visual bug where it appears stuck at spawn
@@ -751,7 +801,7 @@ local function getSniperZombieRealPosition(zombie)
 end
 
 ----------------------------------------------------------------
--- AIMBOT FUNCTIONS (MODIFIED - Special handling for sniper zombies)
+-- AIMBOT FUNCTIONS (MODIFIED - Special handling for different versions)
 ----------------------------------------------------------------
 local function getClosestZombieInFOV()
     local closestZombie = nil
@@ -776,9 +826,11 @@ local function getClosestZombieInFOV()
                     local worldDistance = (targetPosition - camera.CFrame.Position).Magnitude
                     
                     if screenDistance <= aimFOV and worldDistance < closestDistance then
-                        -- MODIFIED: In SniperAimbot version, only target SniperZombies
-                        if currentVersion == "SniperAimbot" and not isSniperZombie(zombie) then
-                            -- Skip non-sniper zombies in SniperAimbot mode
+                        -- MODIFIED: Version-specific targeting logic
+                        if currentVersion == "OnlySniperzombie" and not isSniperZombie(zombie) then
+                            -- Skip non-sniper zombies in OnlySniperzombie mode
+                        elseif currentVersion == "IgnoreWraith" and isWraithZombie(zombie) then
+                            -- Skip Wraith zombies in IgnoreWraith mode
                         else
                             local visible = true
                             if wallCheckEnabled then
@@ -880,7 +932,7 @@ end)
 updateAllZombies()
 
 ----------------------------------------------------------------
--- MAIN LOOP (MODIFIED - Special targeting for sniper zombies)
+-- MAIN LOOP (MODIFIED - Special targeting for different versions)
 ----------------------------------------------------------------
 RunService.RenderStepped:Connect(function()
     -- Update FOV circle position and size
