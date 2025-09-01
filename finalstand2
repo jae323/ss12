@@ -69,7 +69,7 @@ local hitboxEnabled = false
 
 -- NEW: Smooth aiming variables
 local smoothAimEnabled = false
-local smoothnessAmount = 1.0 -- Default smoothness
+local smoothnessAmount = 1.5 -- Default smoothness
 local lastCameraCFrame = camera.CFrame
 
 -- ESP storage (ORIGINAL)
@@ -101,7 +101,7 @@ end
 ----------------------------------------------------------------
 -- MODERN GUI SYSTEM
 ----------------------------------------------------------------
-local mainFrame, toggleUIBtn, contentScrollingFrame, versionFrame
+local mainFrame, toggleUIBtn, contentScrollingFrame, versionFrame, toggleVersionBtn
 
 -- Colors
 local backgroundColor = Color3.fromRGB(30, 30, 40)
@@ -203,6 +203,20 @@ local function initializeModernGUI()
             uiVisible = not uiVisible
             mainFrame.Visible = uiVisible
             toggleUIBtn.Text = uiVisible and "Hide UI [X]" or "Show UI [X]"
+        end
+    )
+    
+    -- Version Toggle Button
+    toggleVersionBtn = createModernButton(
+        screenGui,
+        "Show Version",
+        UDim2.new(0, 100, 0, 30),
+        UDim2.new(0, 10, 0, 50),
+        function()
+            if versionFrame then
+                versionFrame.Visible = not versionFrame.Visible
+                toggleVersionBtn.Text = versionFrame.Visible and "Hide Version" or "Show Version"
+            end
         end
     )
     
@@ -329,50 +343,50 @@ local function initializeModernGUI()
     smoothnessLabel.TextXAlignment = Enum.TextXAlignment.Left
     smoothnessLabel.Parent = smoothnessContainer
     
-    local smoothness05Btn = createModernButton(
-        smoothnessContainer,
-        "0.5",
-        UDim2.new(0.3, 0, 0, 25),
-        UDim2.new(0, 0, 0, 20),
-        function()
-            smoothnessAmount = 0.5
-            smoothnessLabel.Text = "Smoothness: " .. smoothnessAmount
-            smoothness05Btn.BackgroundColor3 = accentColor
-            smoothness10Btn.BackgroundColor3 = buttonColor
-            smoothness15Btn.BackgroundColor3 = buttonColor
-        end
-    )
-    smoothness05Btn.BackgroundColor3 = smoothnessAmount == 0.5 and accentColor or buttonColor
-    
-    local smoothness10Btn = createModernButton(
-        smoothnessContainer,
-        "1.0",
-        UDim2.new(0.3, 0, 0, 25),
-        UDim2.new(0.35, 0, 0, 20),
-        function()
-            smoothnessAmount = 1.0
-            smoothnessLabel.Text = "Smoothness: " .. smoothnessAmount
-            smoothness05Btn.BackgroundColor3 = buttonColor
-            smoothness10Btn.BackgroundColor3 = accentColor
-            smoothness15Btn.BackgroundColor3 = buttonColor
-        end
-    )
-    smoothness10Btn.BackgroundColor3 = smoothnessAmount == 1.0 and accentColor or buttonColor
-    
     local smoothness15Btn = createModernButton(
         smoothnessContainer,
         "1.5",
         UDim2.new(0.3, 0, 0, 25),
-        UDim2.new(0.7, 0, 0, 20),
+        UDim2.new(0, 0, 0, 20),
         function()
             smoothnessAmount = 1.5
             smoothnessLabel.Text = "Smoothness: " .. smoothnessAmount
-            smoothness05Btn.BackgroundColor3 = buttonColor
-            smoothness10Btn.BackgroundColor3 = buttonColor
             smoothness15Btn.BackgroundColor3 = accentColor
+            smoothness20Btn.BackgroundColor3 = buttonColor
+            smoothness25Btn.BackgroundColor3 = buttonColor
         end
     )
     smoothness15Btn.BackgroundColor3 = smoothnessAmount == 1.5 and accentColor or buttonColor
+    
+    local smoothness20Btn = createModernButton(
+        smoothnessContainer,
+        "2.0",
+        UDim2.new(0.3, 0, 0, 25),
+        UDim2.new(0.35, 0, 0, 20),
+        function()
+            smoothnessAmount = 2.0
+            smoothnessLabel.Text = "Smoothness: " .. smoothnessAmount
+            smoothness15Btn.BackgroundColor3 = buttonColor
+            smoothness20Btn.BackgroundColor3 = accentColor
+            smoothness25Btn.BackgroundColor3 = buttonColor
+        end
+    )
+    smoothness20Btn.BackgroundColor3 = smoothnessAmount == 2.0 and accentColor or buttonColor
+    
+    local smoothness25Btn = createModernButton(
+        smoothnessContainer,
+        "2.5",
+        UDim2.new(0.3, 0, 0, 25),
+        UDim2.new(0.7, 0, 0, 20),
+        function()
+            smoothnessAmount = 2.5
+            smoothnessLabel.Text = "Smoothness: " .. smoothnessAmount
+            smoothness15Btn.BackgroundColor3 = buttonColor
+            smoothness20Btn.BackgroundColor3 = buttonColor
+            smoothness25Btn.BackgroundColor3 = accentColor
+        end
+    )
+    smoothness25Btn.BackgroundColor3 = smoothnessAmount == 2.5 and accentColor or buttonColor
     
     yPos = yPos + 45
     
@@ -630,7 +644,7 @@ local function createModernVersionSelectionGUI()
     versionFrame.BackgroundColor3 = backgroundColor
     versionFrame.BorderSizePixel = 0
     versionFrame.Parent = screenGui
-    versionFrame.Visible = true
+    versionFrame.Visible = false
     versionFrame.Active = true
     versionFrame.Draggable = true
     
@@ -745,18 +759,6 @@ local function createModernVersionSelectionGUI()
     buttonLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
         buttonScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, buttonLayout.AbsoluteContentSize.Y + 10)
     end)
-    
-    -- Nút Show/Hide cho GUI phiên bản
-    local showVersionBtn = createModernButton(
-        screenGui,
-        "Hide Version",
-        UDim2.new(0, 100, 0, 30),
-        UDim2.new(0.5, -50, 0.5, 210),
-        function()
-            versionFrame.Visible = not versionFrame.Visible
-            showVersionBtn.Text = versionFrame.Visible and "Hide Version" or "Show Version"
-        end
-    )
 end
 
 ----------------------------------------------------------------
