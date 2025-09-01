@@ -57,6 +57,7 @@ local waitingForKeybind = false
 
 -- Original State (ORIGINAL)
 local aimLockActive = false
+local aimFOV = 150 -- FOV value is still used internally
 local uiVisible = true
 local espVisible = false
 local wallCheckEnabled = true
@@ -70,6 +71,23 @@ local espObjects = {}
 
 -- Detect platform (ORIGINAL)
 isPC = UserInputService:GetPlatform() == Enum.Platform.Windows
+
+----------------------------------------------------------------
+-- FOV CIRCLE SYSTEM (ORIGINAL)
+----------------------------------------------------------------
+local fovCircle = Drawing.new("Circle")
+fovCircle.Visible = false -- FOV circle is hidden by default
+fovCircle.Color = Color3.fromRGB(0, 170, 255)
+fovCircle.Thickness = 2
+fovCircle.NumSides = 64
+fovCircle.Radius = aimFOV
+fovCircle.Filled = false
+
+local function updateFOVCircle()
+    fovCircle.Radius = aimFOV
+    fovCircle.Position = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y/2)
+    fovCircle.Visible = false -- Always keep FOV circle hidden
+end
 
 ----------------------------------------------------------------
 -- GUI SYSTEM (ORIGINAL with protected parent)
@@ -92,7 +110,7 @@ local function initializeMainGUI()
     toggleCorner.CornerRadius = UDim.new(0, 4)
     toggleCorner.Parent = toggleUIBtn
 
-    -- Main Frame (ORIGINAL) - Reduced height since FOV is removed
+    -- Main Frame (ORIGINAL) - Reduced height since FOV slider is removed
     mainFrame = Instance.new("Frame")
     mainFrame.Size = UDim2.new(0, 240, 0, isPC and 300 or 270)
     mainFrame.Position = UDim2.new(0.5, -120, 0.5, -(isPC and 150 or 135))
@@ -230,7 +248,7 @@ local function initializeMainGUI()
         updateAllZombies() 
     end)
 
-    -- Original Hitbox Selection (ORIGINAL)
+    -- Original Hitbox Selection (ORIGINAL) - Moved up since FOV slider is removed
     local hitboxContainer = Instance.new("Frame")
     hitboxContainer.Size = UDim2.new(1, 0, 0, 30)
     hitboxContainer.Position = UDim2.new(0, 0, 0, isPC and 210 or 180)
@@ -392,7 +410,7 @@ local function createVersionSelectionGUI()
     btnCorner.Parent = mainBtn
     btnCorner:Clone().Parent = sniperBtn
     
-    -- Xử lý sự kiện khi chọn phiên bản
+    -- Xử lý sự kiện khi đã chọn phiên bản
     mainBtn.MouseButton1Click:Connect(function()
         currentVersion = "Main"
         mainBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 220)
@@ -482,7 +500,7 @@ local function createESP(zombie)
             textLabel.BackgroundTransparency = 1
             textLabel.Text = zombie.Name
             textLabel.TextColor3 = Color3.new(1, 1, 1)
-            extremeLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+            textLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
             textLabel.TextStrokeTransparency = 0
             textLabel.TextSize = 14
             textLabel.Font = Enum.Font.GothamBold
@@ -580,9 +598,10 @@ end
 ----------------------------------------------------------------
 -- AIMBOT FUNCTIONS (MODIFIED - Special handling for sniper zombies)
 ----------------------------------------------------------------
-local function getClosestZombie()
+local function getClosestZombieInFOV()
     local closestZombie = nil
     local closestDistance = math.huge
+    local screenCenter = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y/2)
     
     for _, zombie in ipairs(zombiesFolder:GetChildren()) do
         -- Bỏ qua zombie có tên "SwampGiant"
@@ -598,9 +617,10 @@ local function getClosestZombie()
                 local screenPos, onScreen = camera:WorldToViewportPoint(targetPosition)
                 
                 if onScreen then
+                    local screenDistance = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
                     local worldDistance = (targetPosition - camera.CFrame.Position).Magnitude
                     
-                    if worldDistance < closestDistance then
+                    if screenDistance <= aimFOV and worldDistance < closestDistance then
                         -- MODIFIED: In SniperAimbot version, only target SniperZombies
                         if currentVersion == "SniperAimbot" and not isSniperZombie(zombie) then
                             -- Skip non-sniper zombies in SniperAimbot mode
@@ -699,7 +719,7 @@ zombiesFolder.ChildAdded:Connect(function(zombie)
     if hitboxEnabled then
         expandHeadHitbox(zombie)
     end
-end)
+end
 
 -- Initialize hitboxes
 updateAllZombies()
@@ -710,7 +730,7 @@ updateAllZombies()
 RunService.RenderStepped:Connect(function()
     -- Aimlock logic
     if aimLockActive then
-        local targetZombie = getClosestZombie()
+        local targetZombie = getClosestZombieInFOV()
         if targetZombie then
             local targetPart = targetZombie[aimPartName]
             if targetPart then
