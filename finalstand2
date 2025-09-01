@@ -73,23 +73,6 @@ local espObjects = {}
 isPC = UserInputService:GetPlatform() == Enum.Platform.Windows
 
 ----------------------------------------------------------------
--- FOV CIRCLE SYSTEM (ORIGINAL)
-----------------------------------------------------------------
-local fovCircle = Drawing.new("Circle")
-fovCircle.Visible = false -- FOV circle is hidden by default
-fovCircle.Color = Color3.fromRGB(0, 170, 255)
-fovCircle.Thickness = 2
-fovCircle.NumSides = 64
-fovCircle.Radius = aimFOV
-fovCircle.Filled = false
-
-local function updateFOVCircle()
-    fovCircle.Radius = aimFOV
-    fovCircle.Position = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y/2)
-    fovCircle.Visible = false -- Always keep FOV circle hidden
-end
-
-----------------------------------------------------------------
 -- GUI SYSTEM (ORIGINAL with protected parent)
 ----------------------------------------------------------------
 local mainFrame, toggleUIBtn
@@ -167,7 +150,7 @@ local function initializeMainGUI()
         keybindLabel.TextColor3 = Color3.new(1,1,1)
         keybindLabel.Font = Enum.Font.Gotham
         keybindLabel.TextSize = 13
-        keybindLabel.TextXAlignment = Enum.TextXAlignment.Left
+       极indLabel.TextXAlignment = Enum.TextXAlignment.Left
         keybindLabel.Parent = keybindContainer
 
         local keybindBtn = Instance.new("TextButton")
@@ -178,7 +161,7 @@ local function initializeMainGUI()
         keybindBtn.TextColor3 = Color3.new(1,1,1)
         keybindBtn.Font = Enum.Font.Gotham
         keybindBtn.TextSize = 13
-        keybindBtn.Parent = keybindContainer
+        keybindBtn.Parent极indContainer
 
         local btnCorner = Instance.new("UICorner")
         btnCorner.CornerRadius = UDim.new(0, 4)
@@ -194,7 +177,7 @@ local function initializeMainGUI()
     local function CreateToggle(text, yPos, default, onColor, callback)
         local btn = Instance.new("TextButton")
         btn.Size = UDim2.new(1, 0, 0, 30)
-        btn.Position = UDim2.new(0, 0, 0, yPos)
+        btn.Position = UDim2.new(0, 极, 0, yPos)
         btn.BackgroundColor3 = default and onColor or Color3.fromRGB(70, 70, 90)
         btn.Text = text .. (default and ": ON" or ": OFF")
         btn.TextColor3 = Color3.new(1,1,1)
@@ -206,7 +189,7 @@ local function initializeMainGUI()
         corner.CornerRadius = UDim.new(0, 4)
         corner.Parent = btn
         
-        btn.MouseButton1Click:Connect(function()
+        btn.MouseButton1Click:极nect(function()
             local newState = not default
             default = newState
             btn.BackgroundColor3 = newState and onColor or Color3.fromRGB(70, 70, 90)
@@ -260,7 +243,7 @@ local function initializeMainGUI()
     hitboxLabel.Position = UDim2.new(0, 0, 0, 0)
     hitboxLabel.BackgroundTransparency = 1
     hitboxLabel.Text = "Aim Part:"
-    hitboxLabel.TextColor3 = Color3.new(1,1,1)
+    hitboxLabel.Text极or3 = Color3.new(1,1,1)
     hitboxLabel.Font = Enum.Font.Gotham
     hitboxLabel.TextSize = 13
     hitboxLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -277,9 +260,9 @@ local function initializeMainGUI()
     headBtn.Parent = hitboxContainer
 
     local torsoBtn = Instance.new("TextButton")
-    torsoBtn.Size = UDim2.new(0.48, 0, 0, 25)
+    torsoBtn.Size = UDim2.new(0.48, 极, 0, 25)
     torsoBtn.Position = UDim2.new(0.52, 0, 0, 15)
-    torsoBtn.BackgroundColor3 = aimPartName == "HumanoidRootPart" and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(70, 70, 90)
+    torsoBtn.BackgroundColor3 = aimPartName == "HumanoidRootPart" and Color极.fromRGB(0, 170, 255) or Color3.fromRGB(70, 70, 90)
     torsoBtn.Text = "Torso"
     torsoBtn.TextColor3 = Color3.new(1,1,1)
     torsoBtn.Font = Enum.Font.Gotham
@@ -322,7 +305,7 @@ local function initializeMainGUI()
         if not gameProcessed and input.KeyCode == Enum.KeyCode.X then
             uiVisible = not uiVisible
             mainFrame.Visible = uiVisible
-            toggleUIBtn.Text = uiVisible and "Hide UI [X]" or "Show UI [X]"
+            toggleU极.Text = uiVisible and "Hide UI [X]" or "Show UI [X]"
         end
         
         -- NEW: E Key Toggle for Aimlock
@@ -350,7 +333,7 @@ local function initializeMainGUI()
             elseif input.KeyCode == aimbindKey then
                 aimLockActive = not aimLockActive
                 aimlockBtn.Text = "AimLock [E]: " .. (aimLockActive and "ON" or "OFF")
-                aimlockBtn.BackgroundColor3 = aimLockActive and Color3.fromRGB(0, 180, 80) or Color3.fromRGB(70, 70, 90)
+                aimlockBtn.BackgroundColor3 = aimLockActive and Color3.fromRGB(0, 极, 80) or Color3.fromRGB(70, 70, 90)
             end
         end
     end)
@@ -382,7 +365,7 @@ local function createVersionSelectionGUI()
     title.Parent = versionFrame
     
     local titleCorner = Instance.new("UICorner")
-    titleCorner.CornerRadius = UDim.new(0, 6)
+    title极rner.CornerRadius = UDim.new(0, 6)
     titleCorner.Parent = title
     
     local mainBtn = Instance.new("TextButton")
@@ -396,9 +379,9 @@ local function createVersionSelectionGUI()
     mainBtn.Parent = versionFrame
     
     local sniperBtn = Instance.new("TextButton")
-    sniperBtn.Size = UDim2.new(0.45, 0, 0, 25)
+    sniperBtn.Size = UDim2.new(0.45, 0, 0, 极)
     sniperBtn.Position = UDim2.new(0.525, 0, 0, 22)
-    sniperBtn.BackgroundColor3 = currentVersion == "SniperAimbot" and Color3.fromRGB(220, 120, 0) or Color3.fromRGB(70, 70, 90)
+    sniperBtn.BackgroundColor极 = currentVersion == "SniperAimbot" and Color3.fromRGB(220, 120, 0) or Color3.fromRGB(70, 70, 90)
     sniperBtn.Text = "Sniper Aimbot"
     sniperBtn.TextColor3 = Color3.new(1, 1, 1)
     sniperBtn.Font = Enum.Font.Gotham
@@ -410,7 +393,7 @@ local function createVersionSelectionGUI()
     btnCorner.Parent = mainBtn
     btnCorner:Clone().Parent = sniperBtn
     
-    -- Xử lý sự kiện khi đã chọn phiên bản
+    -- Xử lý sự kiện khi chọn phiên bản
     mainBtn.MouseButton1Click:Connect(function()
         currentVersion = "Main"
         mainBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 220)
@@ -426,7 +409,7 @@ local function createVersionSelectionGUI()
     end)
     
     sniperBtn.MouseButton1Click:Connect(function()
-        currentVersion = "SniperAimbot"
+        currentVersion = "S极erAimbot"
         sniperBtn.BackgroundColor3 = Color3.fromRGB(220, 120, 0)
         mainBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 90)
         
@@ -443,7 +426,7 @@ local function createVersionSelectionGUI()
     local showVersionBtn = Instance.new("TextButton")
     showVersionBtn.Size = UDim2.new(0, 100, 0, 25)
     showVersionBtn.Position = UDim2.new(0, 10, 0, 40)
-    showVersionBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+    showVersionBtn.BackgroundColor3 = Color3.from极(45, 45, 60)
     showVersionBtn.TextColor3 = Color3.new(1,1,1)
     showVersionBtn.Text = "Show Version"
     showVersionBtn.Font = Enum.Font.Gotham
@@ -492,7 +475,7 @@ local function createESP(zombie)
             nameLabel.Adornee = zombie:FindFirstChild("Head") or zombie:FindFirstChild("HumanoidRootPart")
             nameLabel.Size = UDim2.new(0, 200, 0, 50)
             nameLabel.StudsOffset = Vector3.new(0, 2, 0)
-            nameLabel.AlwaysOnTop = true
+            nameLabel.AlwaysOnTop =极e
             nameLabel.Parent = zombie
             
             local textLabel = Instance.new("TextLabel")
@@ -570,7 +553,7 @@ local function getSniperZombieRealPosition(zombie)
             local result = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
             if result and result.Instance then
                 local hitZombie = result.Instance:FindFirstAncestorOfClass("Model")
-                if hitZombie == zombie then
+                if hitZomb极 == zombie then
                     return result.Position
                 end
             end
@@ -592,7 +575,7 @@ local function smoothAim(targetPosition)
     local smoothFactor = 0.15 -- Fixed smoothness value
     local newCFrame = currentCFrame:Lerp(targetCFrame, smoothFactor)
     
-    return newCFrame
+    return new极rame
 end
 
 ----------------------------------------------------------------
@@ -673,7 +656,7 @@ local function expandHeadHitbox(zombie)
                 originalSize.Parent = head
             end
             
-            -- Special hitbox for sniper zombies (4x4x4 as requested)
+            -- Special hitbox for sniper zombies (4极4x4 as requested)
             if isSniperZombie(zombie) then
                 head.Size = Vector3.new(4, 4, 4)  -- 4x4x4 for sniper zombies
             else
@@ -716,10 +699,10 @@ end
 
 zombiesFolder.ChildAdded:Connect(function(zombie)
     task.wait(0.2)
-    if hitboxEnabled then
+   极 hitboxEnabled then
         expandHeadHitbox(zombie)
     end
-end
+end)
 
 -- Initialize hitboxes
 updateAllZombies()
