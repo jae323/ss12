@@ -776,20 +776,98 @@ lastCameraCFrame = newCFrame
 end
 
 ----------------------------------------------------------------
--- AIMBOT + WALL CHECK FUNCTIONS (UPDATED WITH VERSION LOGIC)
+-- IMPROVED WALL CHECK FUNCTIONS (UPDATED)
 ----------------------------------------------------------------
-local function isVisible(targetPart)
-local origin = camera.CFrame.Position
-local direction = (targetPart.Position - origin).Unit * 500
-local raycastParams = RaycastParams.new()
-raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
-raycastParams.FilterDescendantsInstances = {player.Character, camera}
-raycastParams.IgnoreWater = true
+-- Cache for player characters to improve performance
+local playerCharacters = {}
+local lastPlayerUpdate = 0
 
-local result = workspace:Raycast(origin, direction, raycastParams)
-return result and result.Instance and targetPart:IsDescendantOf(result.Instance.Parent)
+-- Function to update player characters cache
+local function updatePlayerCharacters()
+    local currentTime = os.clock()
+    -- Only update every 0.5 seconds to improve performance
+    if currentTime - lastPlayerUpdate < 0.5 then
+        return
+    end
+    
+    lastPlayerUpdate = currentTime
+    table.clear(playerCharacters)
+    
+    -- Add all player characters to the cache
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= player and plr.Character then
+            table.insert(playerCharacters, plr.Character)
+        end
+    end
 end
 
+-- Improved wall check that ignores players and invisible walls
+local function isVisible(targetPart)
+    if not wallCheckEnabled then
+        return true
+    end
+    
+    -- Update player characters cache
+    updatePlayerCharacters()
+    
+    local origin = camera.CFrame.Position
+    local direction = (targetPart.Position - origin).Unit * 500
+    
+    -- Create raycast parameters
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+    
+    -- Create filter list (local player, camera, and other players)
+    local filterList = {player.Character, camera}
+    for _, char in ipairs(playerCharacters) do
+        table.insert(filterList, char)
+    end
+    
+    raycastParams.FilterDescendantsInstances = filterList
+    raycastParams.IgnoreWater = true
+    
+    -- Cast the ray
+    local result = workspace:Raycast(origin, direction, raycastParams)
+    
+    -- If we hit nothing, the target is visible
+    if not result then
+        return true
+    end
+    
+    -- Check if we hit the target or a transparent/invisible wall
+    local hitInstance = result.Instance
+    
+    -- If we hit the target itself, it's visible
+    if hitInstance and (hitInstance:IsDescendantOf(targetPart.Parent) or targetPart:IsDescendantOf(hitInstance.Parent)) then
+        return true
+    end
+    
+    -- Check if we hit an invisible wall (transparent or with specific properties)
+    if hitInstance then
+        -- Check if the part is transparent (invisible wall)
+        if hitInstance.Transparency >= 0.8 then
+            return true
+        end
+        
+        -- Check if the part has CanCollide disabled
+        if not hitInstance.CanCollide then
+            return true
+        end
+        
+        -- Check if the part is in a specific category of invisible walls
+        local nameLower = hitInstance.Name:lower()
+        if nameLower:find("invisible") or nameLower:find("clip") or nameLower:find("noclip") or nameLower:find("trigger") then
+            return true
+        end
+    end
+    
+    -- If we hit a solid wall, the target is not visible
+    return false
+end
+
+----------------------------------------------------------------
+-- AIMBOT + WALL CHECK FUNCTIONS (UPDATED WITH VERSION LOGIC)
+----------------------------------------------------------------
 local function getClosestZombieInFOV()
 local screenCenter = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
 local closestDist = aimFOV
