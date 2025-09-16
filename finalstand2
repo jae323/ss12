@@ -27,7 +27,7 @@ local versionButtonColors = {}
 local versionFrameVisible = false
 
 -- Smart Special Killing variables
-local GUARDIAN_PRIORITY_RANGE = 50 -- Distance to prioritize GuardianZombie when near closest zombie
+local GUARDIAN_PRIORITY_RANGE = 20 -- Distance to prioritize GuardianZombie when near Hunter (updated from 50 to 20)
 local BOSS_IGNORE_HP_THRESHOLD = 0.5 -- 50% HP
 local BOSS_IGNORE_DURATION = 8 -- Seconds to ignore Boss
 local bossIgnoreTimers = {} -- Table to track boss ignore timers
@@ -554,16 +554,16 @@ local function createVersionSelectionGUI()
     
     -- NEW: Destroyers Only Version
     local destroyersOnlyBtn = createClassicButton(
-        versionScrollingFrame,
-        "Destroyers Only - turret only destroyer",
-        UDim2.new(1, 0, 0, 40),
-        function()
-            currentVersion = "DestroyersOnly"
-            versionFrame.Visible = false
-        end
-    )
-    destroyersOnlyBtn.BackgroundColor3 = currentVersion == "DestroyersOnly" and Color3.fromRGB(255, 215, 0) or colors.button
-    destroyersOnlyBtn.ZIndex = 12
+    versionScrollingFrame,
+    "Destroyers Only - turret only destroyer",
+    UDim2.new(1, 0, 0, 40),
+    function()
+        currentVersion = "DestroyersOnly"
+        versionFrame.Visible = false
+    end
+)
+destroyersOnlyBtn.BackgroundColor3 = currentVersion == "DestroyersOnly" and Color3.fromRGB(255, 215, 0) or colors.button
+destroyersOnlyBtn.ZIndex = 12
     
     -- Update canvas size when content changes
     versionLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
@@ -937,8 +937,8 @@ local function getClosestZombieInFOV()
         end
     end
 
-    -- Second pass for Smart Special Killing: Check for GuardianZombies near the closest zombie
-    if currentVersion == "SmartSpecialKilling" and closestZombie then
+    -- Second pass for Smart Special Killing: Check for GuardianZombies near Hunter zombies
+    if currentVersion == "SmartSpecialKilling" and closestZombie and isHunterZombie(closestZombie) then
         local closestZombiePos = closestZombie:FindFirstChild(aimPartName).Position
         local guardianZombie = nil
         local guardianDistance = math.huge
@@ -952,7 +952,7 @@ local function getClosestZombieInFOV()
                     local dist = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
                     local worldDistance = (part.Position - closestZombiePos).Magnitude
                     
-                    -- Check if this GuardianZombie is within priority range of the closest zombie
+                    -- Check if this GuardianZombie is within 20 studs of the Hunter
                     if worldDistance <= GUARDIAN_PRIORITY_RANGE and dist <= aimFOV then
                         if worldDistance < guardianDistance then
                             guardianDistance = worldDistance
@@ -963,7 +963,7 @@ local function getClosestZombieInFOV()
             end
         end
         
-        -- If we found a GuardianZombie near the closest zombie, prioritize it
+        -- If we found a GuardianZombie near the Hunter, prioritize it
         if guardianZombie then
             return guardianZombie
         end
