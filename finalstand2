@@ -1,4 +1,4 @@
---// SMART SPECIAL KILLING AIM LOCK SCRIPT WITH FOV + CLASSIC GUI SYSTEM + WALL CHECK + HITBOX + VERSION SELECTION + DESTROYERS ONLY //--
+--// SMART SPECIAL KILLING AIM LOCK SCRIPT WITH FOV + CLASSIC GUI SYSTEM + WALL CHECK + HITBOX + VERSION SELECTION + DESTROYERS ONLY + PRINTING MODE //--
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -22,7 +22,7 @@ local wallCheckEnabled = true
 local hitboxEnabled = false
 
 -- Version system
-local currentVersion = "Main" -- "Main", "OnlySniper", "IgnoreWraith", "SmartSpecialKilling", "DestroyersOnly"
+local currentVersion = "Main" -- "Main", "OnlySniper", "IgnoreWraith", "SmartSpecialKilling", "DestroyersOnly", "PrintingMode"
 local versionButtonColors = {}
 local versionFrameVisible = false
 
@@ -439,8 +439,8 @@ local versionFrame
 
 local function createVersionSelectionGUI()
     versionFrame = Instance.new("Frame")
-    versionFrame.Size = UDim2.new(0, 300, 0, 300) -- Increased height for new version
-    versionFrame.Position = UDim2.new(0.5, -150, 0.5, -150)
+    versionFrame.Size = UDim2.new(0, 300, 0, 350) -- Increased height for new version
+    versionFrame.Position = UDim2.new(0.5, -150, 0.5, -175)
     versionFrame.BackgroundColor3 = colors.background
     versionFrame.BorderSizePixel = 1
     versionFrame.BorderColor3 = colors.border
@@ -495,7 +495,7 @@ local function createVersionSelectionGUI()
     versionScrollingFrame.BackgroundTransparency = 1
     versionScrollingFrame.ScrollBarThickness = 8
     versionScrollingFrame.ScrollBarImageColor3 = colors.accent
-    versionScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, 270) -- Increased for new version
+    versionScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, 320) -- Increased for new version
     versionScrollingFrame.ZIndex = 11
     versionScrollingFrame.Parent = versionFrame
     
@@ -552,18 +552,34 @@ local function createVersionSelectionGUI()
     smartSpecialBtn.BackgroundColor3 = currentVersion == "SmartSpecialKilling" and Color3.fromRGB(180, 0, 255) or colors.button
     smartSpecialBtn.ZIndex = 12
     
-    -- NEW: Destroyers Only Version
     local destroyersOnlyBtn = createClassicButton(
-    versionScrollingFrame,
-    "Destroyers Only - turret only destroyer",
-    UDim2.new(1, 0, 0, 40),
-    function()
-        currentVersion = "DestroyersOnly"
-        versionFrame.Visible = false
-    end
-)
-destroyersOnlyBtn.BackgroundColor3 = currentVersion == "DestroyersOnly" and Color3.fromRGB(255, 215, 0) or colors.button
-destroyersOnlyBtn.ZIndex = 12
+        versionScrollingFrame,
+        "Destroyers Only - turret only destroyer",
+        UDim2.new(1, 0, 0, 40),
+        function()
+            currentVersion = "DestroyersOnly"
+            versionFrame.Visible = false
+        end
+    )
+    destroyersOnlyBtn.BackgroundColor3 = currentVersion == "DestroyersOnly" and Color3.fromRGB(255, 215, 0) or colors.button
+    destroyersOnlyBtn.ZIndex = 12
+    
+    -- NEW: Printing Mode Version
+    local printingModeBtn = createClassicButton(
+        versionScrollingFrame,
+        "Printing Mode - reduce damage to print",
+        UDim2.new(1, 0, 0, 40),
+        function()
+            currentVersion = "PrintingMode"
+            versionFrame.Visible = false
+            -- Automatically set aim part to torso
+            aimPartName = "HumanoidRootPart"
+            headBtn.BackgroundColor3 = colors.button
+            torsoBtn.BackgroundColor3 = colors.accent
+        end
+    )
+    printingModeBtn.BackgroundColor3 = currentVersion == "PrintingMode" and Color3.fromRGB(100, 100, 255) or colors.button
+    printingModeBtn.ZIndex = 12
     
     -- Update canvas size when content changes
     versionLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
@@ -623,7 +639,6 @@ local function isDrenchZombie(zombie)
     return zombie.Name:lower():find("drench")
 end
 
--- NEW: Destroyer identification
 local function isDestroyerZombie(zombie)
     return zombie.Name:lower():find("destroyer")
 end
@@ -909,7 +924,13 @@ local function getClosestZombieInFOV()
     local closestZombie = nil
 
     for _, zombie in ipairs(zombiesFolder:GetChildren()) do
-        if zombie:IsA("Model") and zombie:FindFirstChild(aimPartName) then
+        -- Determine which part to aim at based on version
+        local targetPartName = aimPartName
+        if currentVersion == "PrintingMode" then
+            targetPartName = "HumanoidRootPart" -- Always aim at torso in Printing mode
+        end
+        
+        if zombie:IsA("Model") and zombie:FindFirstChild(targetPartName) then
             -- Version-specific filtering
             if currentVersion == "OnlySniper" and not isSniperZombie(zombie) then
                 continue
@@ -921,7 +942,7 @@ local function getClosestZombieInFOV()
                 continue
             end
             
-            local part = zombie[aimPartName]
+            local part = zombie[targetPartName]
             local screenPos, onScreen = camera:WorldToScreenPoint(part.Position)
             if onScreen then
                 local dist = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
@@ -973,48 +994,64 @@ local function getClosestZombieInFOV()
 end
 
 ----------------------------------------------------------------
--- HITBOX EXPANDER FUNCTIONS (UPDATED FOR SNIPER ZOMBIES - 4x4x4)
+-- HITBOX EXPANDER FUNCTIONS (UPDATED FOR PRINTING MODE)
 ----------------------------------------------------------------
-local function expandHeadHitbox(zombie)
-    if zombie:IsA("Model") and zombie:FindFirstChild("Head") then
-        local head = zombie.Head
-        if head:IsA("BasePart") then
-            if not head:FindFirstChild("OriginalSize") then
-                local originalSize = Instance.new("Vector3Value")
-                originalSize.Name = "OriginalSize"
-                originalSize.Value = head.Size
-                originalSize.Parent = head
+local function expandHitbox(zombie)
+    if zombie:IsA("Model") then
+        -- Determine which part to expand based on version
+        local partToExpand = "Head"
+        if currentVersion == "PrintingMode" then
+            partToExpand = "HumanoidRootPart" -- Expand torso in Printing mode
+        end
+        
+        if zombie:FindFirstChild(partToExpand) then
+            local part = zombie[partToExpand]
+            if part:IsA("BasePart") then
+                if not part:FindFirstChild("OriginalSize") then
+                    local originalSize = Instance.new("Vector3Value")
+                    originalSize.Name = "OriginalSize"
+                    originalSize.Value = part.Size
+                    originalSize.Parent = part
+                end
+                
+                -- Make hitbox 4x4x4 for sniper zombies, 5x5x5 for others
+                if isSniperZombie(zombie) then
+                    part.Size = Vector3.new(4, 4, 4) -- 4x4x4 hitbox for sniper zombies
+                else
+                    part.Size = Vector3.new(5, 5, 5) -- Normal hitbox for other zombies
+                end
+                
+                part.Transparency = 0.5
+                part.CanCollide = false
+                part.Material = Enum.Material.ForceField
             end
-            
-            -- Make hitbox 4x4x4 for sniper zombies
-            if isSniperZombie(zombie) then
-                head.Size = Vector3.new(4, 4, 4) -- 4x4x4 hitbox for sniper zombies
-            else
-                head.Size = Vector3.new(5, 5, 5) -- Normal hitbox for other zombies
-            end
-            
-            head.Transparency = 0.5
-            head.CanCollide = false
-            head.Material = Enum.Material.ForceField
         end
     end
 end
 
-local function resetHeadHitbox(zombie)
-    if zombie:IsA("Model") and zombie:FindFirstChild("Head") then
-        local head = zombie.Head
-        if head:IsA("BasePart") then
-            if head:FindFirstChild("OriginalSize") then
-                head.Size = head.OriginalSize.Value
-                head.Transparency = 0
-                head.CanCollide = true
-                head.Material = Enum.Material.Plastic
-                head.OriginalSize:Destroy()
-            else
-                head.Size = Vector3.new(1, 1, 1)
-                head.Transparency = 0
-                head.CanCollide = true
-                head.Material = Enum.Material.Plastic
+local function resetHitbox(zombie)
+    if zombie:IsA("Model") then
+        -- Determine which part to reset based on version
+        local partToReset = "Head"
+        if currentVersion == "PrintingMode" then
+            partToReset = "HumanoidRootPart" -- Reset torso in Printing mode
+        end
+        
+        if zombie:FindFirstChild(partToReset) then
+            local part = zombie[partToReset]
+            if part:IsA("BasePart") then
+                if part:FindFirstChild("OriginalSize") then
+                    part.Size = part.OriginalSize.Value
+                    part.Transparency = 0
+                    part.CanCollide = true
+                    part.Material = Enum.Material.Plastic
+                    part.OriginalSize:Destroy()
+                else
+                    part.Size = Vector3.new(2, 2, 1) -- Default torso size
+                    part.Transparency = 0
+                    part.CanCollide = true
+                    part.Material = Enum.Material.Plastic
+                end
             end
         end
     end
@@ -1023,9 +1060,9 @@ end
 local function updateAllZombies()
     for _, zombie in ipairs(zombiesFolder:GetChildren()) do
         if hitboxEnabled then
-            expandHeadHitbox(zombie)
+            expandHitbox(zombie)
         else
-            resetHeadHitbox(zombie)
+            resetHitbox(zombie)
         end
     end
 end
@@ -1041,7 +1078,7 @@ end)
 zombiesFolder.ChildAdded:Connect(function(zombie)
     task.wait(0.2)
     if hitboxEnabled then
-        expandHeadHitbox(zombie)
+        expandHitbox(zombie)
     end
 end)
 
@@ -1071,7 +1108,13 @@ RunService.RenderStepped:Connect(function()
     if aimLockActive then
         local closestZombie = getClosestZombieInFOV()
         if closestZombie then
-            local targetPart = closestZombie[aimPartName]
+            -- Determine which part to aim at based on version
+            local targetPartName = aimPartName
+            if currentVersion == "PrintingMode" then
+                targetPartName = "HumanoidRootPart" -- Always aim at torso in Printing mode
+            end
+            
+            local targetPart = closestZombie[targetPartName]
             local targetPosition = targetPart.Position
             
             -- Aim slightly higher for sniper zombies
