@@ -852,90 +852,67 @@ end
 ----------------------------------------------------------------
 -- IMPROVED WALL CHECK FUNCTIONS (UPDATED)
 ----------------------------------------------------------------
--- Cache for player characters to improve performance
-local playerCharacters = {}
-local lastPlayerUpdate = 0
-
--- Function to update player characters cache
-local function updatePlayerCharacters()
-    local currentTime = os.clock()
-    -- Only update every 0.5 seconds to improve performance
-    if currentTime - lastPlayerUpdate < 0.5 then
-        return
-    end
-    
-    lastPlayerUpdate = currentTime
-    table.clear(playerCharacters)
-    
-    -- Add all player characters to the cache
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= player and plr.Character then
-            table.insert(playerCharacters, plr.Character)
-        end
-    end
-end
-
--- Improved wall check that ignores players and invisible walls
 local function isVisible(targetPart)
     if not wallCheckEnabled then
         return true
     end
     
-    -- Update player characters cache
-    updatePlayerCharacters()
+    -- Get camera position
+    local cameraPos = camera.CFrame.Position
     
-    local origin = camera.CFrame.Position
-    local direction = (targetPart.Position - origin).Unit * 500
+    -- Get target position
+    local targetPos = targetPart.Position
+    
+    -- Create a ray from camera to target
+    local direction = (targetPos - cameraPos).Unit
+    local distance = (targetPos - cameraPos).Magnitude
     
     -- Create raycast parameters
     local raycastParams = RaycastParams.new()
     raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
     
-    -- Create filter list (local player, camera, and other players)
+    -- Create filter list (ignore players, camera, and the target itself)
     local filterList = {player.Character, camera}
-    for _, char in ipairs(playerCharacters) do
-        table.insert(filterList, char)
+    
+    -- Add all players to filter list
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= player and plr.Character then
+            table.insert(filterList, plr.Character)
+        end
+    end
+    
+    -- Add the target's parent to filter list to avoid hitting the target itself
+    if targetPart.Parent then
+        table.insert(filterList, targetPart.Parent)
     end
     
     raycastParams.FilterDescendantsInstances = filterList
     raycastParams.IgnoreWater = true
     
     -- Cast the ray
-    local result = workspace:Raycast(origin, direction, raycastParams)
+    local result = workspace:Raycast(cameraPos, direction * distance, raycastParams)
     
     -- If we hit nothing, the target is visible
     if not result then
         return true
     end
     
-    -- Check if we hit the target or a transparent/invisible wall
-    local hitInstance = result.Instance
-    
-    -- If we hit the target itself, it's visible
-    if hitInstance and (hitInstance:IsDescendantOf(targetPart.Parent) or targetPart:IsDescendantOf(hitInstance.Parent)) then
-        return true
-    end
-    
-    -- Check if we hit an invisible wall (transparent or with specific properties)
-    if hitInstance then
-        -- Check if the part is transparent (invisible wall)
-        if hitInstance.Transparency >= 0.8 then
-            return true
-        end
+    -- Check if we hit a transparent part (like glass)
+    if result.Instance and result.Instance.Transparency > 0.8 then
+        -- Cast another ray from the hit position to the target
+        local newRaycastParams = RaycastParams.new()
+        newRaycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+        newRaycastParams.FilterDescendantsInstances = filterList
+        newRaycastParams.IgnoreWater = true
         
-        -- Check if the part has CanCollide disabled
-        if not hitInstance.CanCollide then
-            return true
-        end
+        local newResult = workspace:Raycast(result.Position + (direction * 0.1), direction * (distance - (result.Position - cameraPos).Magnitude), newRaycastParams)
         
-        -- Check if the part is in a specific category of invisible walls
-        local nameLower = hitInstance.Name:lower()
-        if nameLower:find("invisible") or nameLower:find("clip") or nameLower:find("noclip") or nameLower:find("trigger") then
+        if not newResult then
             return true
         end
     end
     
-    -- If we hit a solid wall, the target is not visible
+    -- If we hit something solid, the target is not visible
     return false
 end
 
@@ -965,15 +942,21 @@ local function getClosestZombieInFOV()
             
             local part = zombie[targetPartName]
             local screenPos, onScreen = camera:WorldToScreenPoint(part.Position)
+            
             if onScreen then
                 local dist = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
-                local visible = true
-                if wallCheckEnabled then
-                    visible = isVisible(part)
-                end
-                if dist < closestDist and visible then
-                    closestDist = dist
-                    closestZombie = zombie
+                
+                -- Only check visibility if within FOV
+                if dist < closestDist then
+                    local visible = true
+                    if wallCheckEnabled then
+                        visible = isVisible(part)
+                    end
+                    
+                    if visible then
+                        closestDist = dist
+                        closestZombie = zombie
+                    end
                 end
             end
         end
@@ -996,7 +979,12 @@ local function getClosestZombieInFOV()
                     
                     -- Check if this GuardianZombie is within 20 studs of the Hunter
                     if worldDistance <= GUARDIAN_PRIORITY_RANGE and dist <= aimFOV then
-                        if worldDistance < guardianDistance then
+                        local visible = true
+                        if wallCheckEnabled then
+                            visible = isVisible(part)
+                        end
+                        
+                        if visible and worldDistance < guardianDistance then
                             guardianDistance = worldDistance
                             guardianZombie = zombie
                         end
