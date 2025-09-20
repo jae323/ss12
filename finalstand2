@@ -1,4 +1,4 @@
---// SMART SPECIAL KILLING AIM LOCK SCRIPT WITH FOV + CLASSIC GUI SYSTEM + WALL CHECK + HITBOX + VERSION SELECTION + DESTROYERS ONLY + PRINTING MODE //--
+--// SMART SPECIAL KILLING AIM LOCK SCRIPT WITH FOV + CLASSIC GUI SYSTEM + WALL CHECK + HITBOX + VERSION SELECTION + DESTROYERS ONLY + PRINTING MODE + ANNIHILATOR ONLY //--
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -22,7 +22,7 @@ local wallCheckEnabled = true
 local hitboxEnabled = false
 
 -- Version system
-local currentVersion = "Main" -- "Main", "OnlySniper", "IgnoreWraith", "SmartSpecialKilling", "DestroyersOnly", "PrintingMode"
+local currentVersion = "Main" -- "Main", "OnlySniper", "IgnoreWraith", "SmartSpecialKilling", "DestroyersOnly", "PrintingMode", "AnnihilatorOnly"
 local versionButtonColors = {}
 local versionFrameVisible = false
 
@@ -71,7 +71,8 @@ local espColors = {
     hunter = Color3.fromRGB(255, 165, 0),        -- Orange for hunter zombies
     berserk = Color3.fromRGB(255, 0, 0),         -- Red for berserk zombies
     drench = Color3.fromRGB(0, 100, 255),        -- Blue for drench zombies
-    destroyer = Color3.fromRGB(255, 215, 0)      -- Gold for destroyer zombies
+    destroyer = Color3.fromRGB(255, 215, 0),     -- Gold for destroyer zombies
+    annihilator = Color3.fromRGB(255, 50, 50)    -- Red for annihilator zombies
 }
 
 ----------------------------------------------------------------
@@ -88,6 +89,10 @@ mainContainer.Size = UDim2.new(0, 300, 0, 400)
 mainContainer.Position = UDim2.new(0.5, -150, 0.5, -200)
 mainContainer.BackgroundTransparency = 1
 mainContainer.Parent = screenGui
+
+-- Make main GUI draggable
+mainContainer.Active = true
+mainContainer.Draggable = true
 
 -- Classic frame with border
 local mainFrame = Instance.new("Frame")
@@ -443,8 +448,8 @@ local versionFrame
 
 local function createVersionSelectionGUI()
     versionFrame = Instance.new("Frame")
-    versionFrame.Size = UDim2.new(0, 300, 0, 350) -- Increased height for new version
-    versionFrame.Position = UDim2.new(0.5, -150, 0.5, -175)
+    versionFrame.Size = UDim2.new(0, 300, 0, 400) -- Increased height for new version
+    versionFrame.Position = UDim2.new(0.5, -150, 0.5, -200)
     versionFrame.BackgroundColor3 = colors.background
     versionFrame.BorderSizePixel = 1
     versionFrame.BorderColor3 = colors.border
@@ -499,7 +504,7 @@ local function createVersionSelectionGUI()
     versionScrollingFrame.BackgroundTransparency = 1
     versionScrollingFrame.ScrollBarThickness = 8
     versionScrollingFrame.ScrollBarImageColor3 = colors.accent
-    versionScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, 320) -- Increased for new version
+    versionScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, 370) -- Increased for new version
     versionScrollingFrame.ZIndex = 11
     versionScrollingFrame.Parent = versionFrame
     
@@ -588,7 +593,7 @@ local function createVersionSelectionGUI()
     destroyersOnlyBtn.BackgroundColor3 = currentVersion == "DestroyersOnly" and Color3.fromRGB(255, 215, 0) or colors.button
     destroyersOnlyBtn.ZIndex = 12
     
-    -- NEW: Printing Mode Version
+    -- Printing Mode Version
     local printingModeBtn = createClassicButton(
         versionScrollingFrame,
         "Printing Mode - reduce damage to print",
@@ -604,6 +609,23 @@ local function createVersionSelectionGUI()
     )
     printingModeBtn.BackgroundColor3 = currentVersion == "PrintingMode" and Color3.fromRGB(100, 100, 255) or colors.button
     printingModeBtn.ZIndex = 12
+    
+    -- NEW: Annihilator Only Version
+    local annihilatorOnlyBtn = createClassicButton(
+        versionScrollingFrame,
+        "Annihilator Only - target only robot",
+        UDim2.new(1, 0, 0, 40),
+        function()
+            currentVersion = "AnnihilatorOnly"
+            aimPartName = "Head" -- Reset to head for non-Printing modes
+            headBtn.BackgroundColor3 = colors.accent
+            torsoBtn.BackgroundColor3 = colors.button
+            versionFrame.Visible = false
+            updateAllZombies()
+        end
+    )
+    annihilatorOnlyBtn.BackgroundColor3 = currentVersion == "AnnihilatorOnly" and Color3.fromRGB(255, 50, 50) or colors.button
+    annihilatorOnlyBtn.ZIndex = 12
     
     -- Update canvas size when content changes
     versionLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
@@ -667,6 +689,11 @@ local function isDestroyerZombie(zombie)
     return zombie.Name:lower():find("destroyer")
 end
 
+-- NEW: Annihilator zombie identification
+local function isAnnihilatorZombie(zombie)
+    return zombie.Name:lower():find("annihilator") or zombie.Name:lower():find("robot")
+end
+
 ----------------------------------------------------------------
 -- SMART SPECIAL KILLING FUNCTIONS (NEW)
 ----------------------------------------------------------------
@@ -717,7 +744,9 @@ local function clearESP()
 end
 
 local function getZombieColor(zombie)
-    if isDestroyerZombie(zombie) then
+    if isAnnihilatorZombie(zombie) then
+        return espColors.annihilator
+    elseif isDestroyerZombie(zombie) then
         return espColors.destroyer
     elseif isBossZombie(zombie) then
         return espColors.boss
@@ -741,7 +770,8 @@ end
 local function shouldShowESP(zombie)
     local name = zombie.Name:lower()
     return name:find("sniper") or name:find("hunter") or name:find("berserk") or name:find("boss") or 
-           name:find("wraith") or name:find("guardian") or name:find("drench") or name:find("destroyer")
+           name:find("wraith") or name:find("guardian") or name:find("drench") or name:find("destroyer") or
+           name:find("annihilator") or name:find("robot")
 end
 
 local function createESP(obj)
@@ -937,6 +967,8 @@ local function getClosestZombieInFOV()
             elseif currentVersion == "SmartSpecialKilling" and isBossZombie(zombie) and shouldIgnoreBoss(zombie) then
                 continue
             elseif currentVersion == "DestroyersOnly" and not isDestroyerZombie(zombie) then
+                continue
+            elseif currentVersion == "AnnihilatorOnly" and not isAnnihilatorZombie(zombie) then
                 continue
             end
             
