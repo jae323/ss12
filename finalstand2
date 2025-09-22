@@ -72,7 +72,8 @@ local espColors = {
     berserk = Color3.fromRGB(255, 0, 0),         -- Red for berserk zombies
     drench = Color3.fromRGB(0, 100, 255),        -- Blue for drench zombies
     destroyer = Color3.fromRGB(255, 215, 0),     -- Gold for destroyer zombies
-    annihilator = Color3.fromRGB(255, 50, 50)    -- Red for annihilator zombies
+    annihilator = Color3.fromRGB(255, 50, 50),   -- Red for annihilator zombies
+    swampGiant = Color3.fromRGB(100, 75, 50)     -- Brown for swamp giant
 }
 
 ----------------------------------------------------------------
@@ -694,6 +695,11 @@ local function isAnnihilatorZombie(zombie)
     return zombie.Name:lower():find("annihilator") or zombie.Name:lower():find("robot")
 end
 
+-- NEW: SwampGiant zombie identification
+local function isSwampGiantZombie(zombie)
+    return zombie.Name == "SwampGiant" or zombie.Name:lower():find("swampgiant")
+end
+
 ----------------------------------------------------------------
 -- SMART SPECIAL KILLING FUNCTIONS (NEW)
 ----------------------------------------------------------------
@@ -744,7 +750,9 @@ local function clearESP()
 end
 
 local function getZombieColor(zombie)
-    if isAnnihilatorZombie(zombie) then
+    if isSwampGiantZombie(zombie) then
+        return espColors.swampGiant
+    elseif isAnnihilatorZombie(zombie) then
         return espColors.annihilator
     elseif isDestroyerZombie(zombie) then
         return espColors.destroyer
@@ -771,7 +779,7 @@ local function shouldShowESP(zombie)
     local name = zombie.Name:lower()
     return name:find("sniper") or name:find("hunter") or name:find("berserk") or name:find("boss") or 
            name:find("wraith") or name:find("guardian") or name:find("drench") or name:find("destroyer") or
-           name:find("annihilator") or name:find("robot")
+           name:find("annihilator") or name:find("robot") or name:find("swampgiant")
 end
 
 local function createESP(obj)
@@ -955,6 +963,11 @@ local function getClosestZombieInFOV()
     local closestZombie = nil
 
     for _, zombie in ipairs(zombiesFolder:GetChildren()) do
+        -- Skip SwampGiant zombies entirely
+        if isSwampGiantZombie(zombie) then
+            continue
+        end
+        
         -- Determine which part to aim at based on version
         local targetPartName = aimPartName
         
@@ -1001,6 +1014,11 @@ local function getClosestZombieInFOV()
         local guardianDistance = math.huge
         
         for _, zombie in ipairs(zombiesFolder:GetChildren()) do
+            -- Skip SwampGiant zombies
+            if isSwampGiantZombie(zombie) then
+                continue
+            end
+            
             if zombie:IsA("Model") and isGuardianZombie(zombie) and zombie:FindFirstChild(aimPartName) then
                 local part = zombie[aimPartName]
                 local screenPos, onScreen = camera:WorldToScreenPoint(part.Position)
@@ -1035,9 +1053,14 @@ local function getClosestZombieInFOV()
 end
 
 ----------------------------------------------------------------
--- HITBOX EXPANDER FUNCTIONS (UPDATED FOR PRINTING MODE)
+-- HITBOX EXPANDER FUNCTIONS (UPDATED FOR PRINTING MODE + SWAMPGIANT + SNIPERZOMBIE)
 ----------------------------------------------------------------
 local function expandHeadHitbox(zombie)
+    -- Skip SwampGiant zombies entirely for hitbox expansion
+    if isSwampGiantZombie(zombie) then
+        return
+    end
+    
     if zombie:IsA("Model") and zombie:FindFirstChild("Head") then
         local head = zombie.Head
         if head:IsA("BasePart") then
@@ -1048,9 +1071,11 @@ local function expandHeadHitbox(zombie)
                 originalSize.Parent = head
             end
             
-            -- Make hitbox 4x4x4 for sniper zombies
-            if isSniperZombie(zombie) then
-                head.Size = Vector3.new(4, 4, 4) -- 4x4x4 hitbox for sniper zombies
+            -- Make hitbox 3x3x3 for SniperZombie, 4x4x4 for other sniper zombies, 5x5x5 for normal zombies
+            if zombie.Name == "SniperZombie" then
+                head.Size = Vector3.new(3, 3, 3) -- 3x3x3 hitbox for SniperZombie specifically
+            elseif isSniperZombie(zombie) then
+                head.Size = Vector3.new(4, 4, 4) -- 4x4x4 hitbox for other sniper zombies
             else
                 head.Size = Vector3.new(5, 5, 5) -- Normal hitbox for other zombies
             end
@@ -1063,6 +1088,11 @@ local function expandHeadHitbox(zombie)
 end
 
 local function expandTorsoHitbox(zombie)
+    -- Skip SwampGiant zombies entirely for hitbox expansion
+    if isSwampGiantZombie(zombie) then
+        return
+    end
+    
     if zombie:IsA("Model") and zombie:FindFirstChild("HumanoidRootPart") then
         local torso = zombie.HumanoidRootPart
         if torso:IsA("BasePart") then
@@ -1073,9 +1103,11 @@ local function expandTorsoHitbox(zombie)
                 originalSize.Parent = torso
             end
             
-            -- Make hitbox 4x4x4 for sniper zombies
-            if isSniperZombie(zombie) then
-                torso.Size = Vector3.new(4, 4, 4) -- 4x4x4 hitbox for sniper zombies
+            -- Make hitbox 3x3x3 for SniperZombie, 4x4x4 for other sniper zombies, 5x5x5 for normal zombies
+            if zombie.Name == "SniperZombie" then
+                torso.Size = Vector3.new(3, 3, 3) -- 3x3x3 hitbox for SniperZombie specifically
+            elseif isSniperZombie(zombie) then
+                torso.Size = Vector3.new(4, 4, 4) -- 4x4x4 hitbox for other sniper zombies
             else
                 torso.Size = Vector3.new(5, 5, 5) -- Normal hitbox for other zombies
             end
@@ -1134,11 +1166,13 @@ local function updateAllZombies()
             resetHeadHitbox(zombie)
             resetTorsoHitbox(zombie)
             
-            -- Then expand the appropriate one based on version
-            if currentVersion == "PrintingMode" then
-                expandTorsoHitbox(zombie)
-            else
-                expandHeadHitbox(zombie)
+            -- Then expand the appropriate one based on version (but skip SwampGiant)
+            if not isSwampGiantZombie(zombie) then
+                if currentVersion == "PrintingMode" then
+                    expandTorsoHitbox(zombie)
+                else
+                    expandHeadHitbox(zombie)
+                end
             end
         else
             -- Reset both hitboxes if hitbox is disabled
@@ -1163,11 +1197,13 @@ zombiesFolder.ChildAdded:Connect(function(zombie)
         resetHeadHitbox(zombie)
         resetTorsoHitbox(zombie)
         
-        -- Then expand the appropriate one based on version
-        if currentVersion == "PrintingMode" then
-            expandTorsoHitbox(zombie)
-        else
-            expandHeadHitbox(zombie)
+        -- Then expand the appropriate one based on version (but skip SwampGiant)
+        if not isSwampGiantZombie(zombie) then
+            if currentVersion == "PrintingMode" then
+                expandTorsoHitbox(zombie)
+            else
+                expandHeadHitbox(zombie)
+            end
         end
     end
 end)
