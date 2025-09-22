@@ -73,7 +73,9 @@ local espColors = {
     drench = Color3.fromRGB(0, 100, 255),        -- Blue for drench zombies
     destroyer = Color3.fromRGB(255, 215, 0),     -- Gold for destroyer zombies
     annihilator = Color3.fromRGB(255, 50, 50),   -- Red for annihilator zombies
-    swampGiant = Color3.fromRGB(100, 75, 50)     -- Brown for swamp giant
+    swampGiant = Color3.fromRGB(100, 75, 50),    -- Brown for swamp giant
+    headless = Color3.fromRGB(150, 0, 150),      -- Purple for headless zombies
+    toxic = Color3.fromRGB(0, 255, 100)          -- Acid green for toxic zombies
 }
 
 ----------------------------------------------------------------
@@ -700,6 +702,16 @@ local function isSwampGiantZombie(zombie)
     return zombie.Name == "SwampGiant" or zombie.Name:lower():find("swampgiant")
 end
 
+-- NEW: Headless zombie identification
+local function isHeadlessZombie(zombie)
+    return zombie.Name == "Headless" or zombie.Name:lower():find("headless")
+end
+
+-- NEW: Toxic zombie identification
+local function isToxicZombie(zombie)
+    return zombie.Name == "ToxicZombie" or zombie.Name:lower():find("toxic")
+end
+
 ----------------------------------------------------------------
 -- SMART SPECIAL KILLING FUNCTIONS (NEW)
 ----------------------------------------------------------------
@@ -750,7 +762,11 @@ local function clearESP()
 end
 
 local function getZombieColor(zombie)
-    if isSwampGiantZombie(zombie) then
+    if isHeadlessZombie(zombie) then
+        return espColors.headless
+    elseif isToxicZombie(zombie) then
+        return espColors.toxic
+    elseif isSwampGiantZombie(zombie) then
         return espColors.swampGiant
     elseif isAnnihilatorZombie(zombie) then
         return espColors.annihilator
@@ -779,7 +795,8 @@ local function shouldShowESP(zombie)
     local name = zombie.Name:lower()
     return name:find("sniper") or name:find("hunter") or name:find("berserk") or name:find("boss") or 
            name:find("wraith") or name:find("guardian") or name:find("drench") or name:find("destroyer") or
-           name:find("annihilator") or name:find("robot") or name:find("swampgiant")
+           name:find("annihilator") or name:find("robot") or name:find("swampgiant") or 
+           name:find("headless") or name:find("toxic")
 end
 
 local function createESP(obj)
@@ -1053,7 +1070,7 @@ local function getClosestZombieInFOV()
 end
 
 ----------------------------------------------------------------
--- HITBOX EXPANDER FUNCTIONS (UPDATED FOR PRINTING MODE + SWAMPGIANT + SNIPERZOMBIE)
+-- HITBOX EXPANDER FUNCTIONS (UPDATED FOR PRINTING MODE + SWAMPGIANT + SNIPERZOMBIE + BRIGHTER VISUALS)
 ----------------------------------------------------------------
 local function expandHeadHitbox(zombie)
     -- Skip SwampGiant zombies entirely for hitbox expansion
@@ -1080,9 +1097,11 @@ local function expandHeadHitbox(zombie)
                 head.Size = Vector3.new(5, 5, 5) -- Normal hitbox for other zombies
             end
             
-            head.Transparency = 0.5
+            -- Brighter hitbox visualization
+            head.Transparency = 0.3  -- Reduced from 0.5 to make it brighter
             head.CanCollide = false
-            head.Material = Enum.Material.ForceField
+            head.Material = Enum.Material.Neon  -- Changed to Neon for brighter appearance
+            head.Color = Color3.fromRGB(255, 255, 0)  -- Bright yellow color for hitboxes
         end
     end
 end
@@ -1112,9 +1131,11 @@ local function expandTorsoHitbox(zombie)
                 torso.Size = Vector3.new(5, 5, 5) -- Normal hitbox for other zombies
             end
             
-            torso.Transparency = 0.5
+            -- Brighter hitbox visualization
+            torso.Transparency = 0.3  -- Reduced from 0.5 to make it brighter
             torso.CanCollide = false
-            torso.Material = Enum.Material.ForceField
+            torso.Material = Enum.Material.Neon  -- Changed to Neon for brighter appearance
+            torso.Color = Color3.fromRGB(255, 255, 0)  -- Bright yellow color for hitboxes
         end
     end
 end
