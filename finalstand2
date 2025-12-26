@@ -1,5 +1,6 @@
 --// SMART SPECIAL KILLING AIM LOCK SCRIPT WITH FOV + CLASSIC GUI SYSTEM + WALL CHECK + HITBOX + TELEPORT //--
 --// WITH MODERN CUSTOM AUTO TELEPORT DISTANCE AND ANIMATED TEXT BY Jack4Life //--
+--// NOW WITH VIDEO INTRO ANIMATION //--
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -95,6 +96,130 @@ local espColors = {
     Boss = Color3.fromRGB(255, 165, 0),            -- Orange
     Destroyer = Color3.fromRGB(128, 0, 128)        -- Purple
 }
+
+----------------------------------------------------------------
+-- VIDEO INTRO ANIMATION - FULL SCREEN COVER
+----------------------------------------------------------------
+local function playVideoIntro()
+    -- Create the video GUI
+    local videoGui = Instance.new("ScreenGui")
+    videoGui.Name = "VideoIntroGui"
+    videoGui.ResetOnSpawn = false
+    videoGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    videoGui.Parent = player:WaitForChild("PlayerGui")
+    
+    -- Create a fullscreen black background (in case video fails)
+    local background = Instance.new("Frame")
+    background.Size = UDim2.new(1, 0, 1, 0)
+    background.Position = UDim2.new(0, 0, 0, 0)
+    background.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    background.BackgroundTransparency = 0
+    background.ZIndex = 900
+    background.Parent = videoGui
+    
+    -- Create VideoFrame to play the video
+    local videoFrame = Instance.new("VideoFrame")
+    videoFrame.Size = UDim2.new(1, 0, 1, 0)
+    videoFrame.Position = UDim2.new(0, 0, 0, 0)
+    videoFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    videoFrame.ZIndex = 901
+    videoFrame.Parent = background
+    
+    -- Set video properties
+    videoFrame.Video = "rbxassetid://5608333583" -- Your video ID
+    videoFrame.Looped = false
+    videoFrame.Volume = 1 -- Set volume to 100%
+    
+    -- Loading text (in case video takes time to load)
+    local loadingText = Instance.new("TextLabel")
+    loadingText.Size = UDim2.new(1, 0, 0.1, 0)
+    loadingText.Position = UDim2.new(0, 0, 0.5, -20)
+    loadingText.BackgroundTransparency = 1
+    loadingText.Text = "Loading Intro Video..."
+    loadingText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    loadingText.Font = Enum.Font.GothamBold
+    loadingText.TextSize = 24
+    loadingText.ZIndex = 902
+    loadingText.TextTransparency = 0
+    loadingText.Parent = background
+    
+    -- Countdown text
+    local countdownText = Instance.new("TextLabel")
+    countdownText.Size = UDim2.new(1, 0, 0.1, 0)
+    countdownText.Position = UDim2.new(0, 0, 0.8, 0)
+    countdownText.BackgroundTransparency = 1
+    countdownText.Text = "Video will play for 4 seconds..."
+    countdownText.TextColor3 = Color3.fromRGB(200, 200, 200)
+    countdownText.Font = Enum.Font.Gotham
+    countdownText.TextSize = 18
+    countdownText.ZIndex = 902
+    countdownText.TextTransparency = 0
+    countdownText.Parent = background
+    
+    -- Animation sequence
+    local function startVideoAnimation()
+        print("Starting video intro animation...")
+        
+        -- Fade in background
+        background.BackgroundTransparency = 1
+        TweenService:Create(
+            background,
+            TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+            {BackgroundTransparency = 0}
+        ):Play()
+        
+        wait(0.5)
+        
+        -- Try to play the video
+        local videoSuccess = pcall(function()
+            videoFrame:Play()
+        end)
+        
+        if videoSuccess then
+            print("Video started playing successfully")
+            -- Fade out loading text after 0.5 seconds
+            wait(0.5)
+            TweenService:Create(
+                loadingText,
+                TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                {TextTransparency = 1}
+            ):Play()
+        else
+            print("Failed to play video, showing fallback animation")
+            -- If video fails, show a simple animation instead
+            loadingText.Text = "Video Loading Failed - Starting in 4 seconds..."
+            wait(1)
+            TweenService:Create(
+                loadingText,
+                TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                {TextTransparency = 1}
+            ):Play()
+        end
+        
+        -- Wait exactly 4 seconds for video to play
+        wait(4)
+        
+        print("4 seconds elapsed - stopping video immediately")
+        
+        -- Immediately stop video
+        pcall(function()
+            videoFrame:Stop()
+        end)
+        
+        -- Immediate fade out (no animation delay)
+        videoFrame.BackgroundTransparency = 1
+        background.BackgroundTransparency = 1
+        countdownText.TextTransparency = 1
+        
+        -- Destroy the video GUI immediately
+        videoGui:Destroy()
+        
+        print("Video animation completed and GUI destroyed")
+        return true
+    end
+    
+    return startVideoAnimation
+end
 
 ----------------------------------------------------------------
 -- FIRST, CREATE ALL GUI ELEMENTS (BUT HIDDEN)
@@ -332,7 +457,9 @@ end)
 
 local fovToggle = createClassicToggle("FOV Circle", fovVisible, function(state)
     fovVisible = state
-    fovCircle.Visible = state
+    if fovCircle then
+        fovCircle.Visible = state
+    end
 end)
 
 local espToggle = createClassicToggle("Zombie ESP", espVisible, function(state)
@@ -396,7 +523,9 @@ local function updateFOVSlider()
     sliderFill.Size = UDim2.new((aimFOV - 20)/280, 0, 1, 0)
     sliderKnob.Position = UDim2.new((aimFOV - 20)/280, -9, 0.5, -9)
     sliderLabel.Text = "Aim FOV: " .. aimFOV
-    fovCircle.Radius = aimFOV
+    if fovCircle then
+        fovCircle.Radius = aimFOV
+    end
 end
 
 sliderTrack.InputBegan:Connect(function(input)
@@ -539,14 +668,8 @@ local toggleUIBtn = createClassicButton(
 toggleUIBtn.Position = UDim2.new(0, 10, 0, 10)
 toggleUIBtn.Visible = false -- Start hidden
 
--- FOV Circle Drawing
-local fovCircle = Drawing.new("Circle")
-fovCircle.Color = Color3.fromRGB(0, 170, 255)
-fovCircle.Thickness = 2
-fovCircle.NumSides = 64
-fovCircle.Radius = aimFOV
-fovCircle.Filled = false
-fovCircle.Visible = fovVisible
+-- FOV Circle Drawing (created later after animation)
+local fovCircle = nil
 
 -- Force update scroll size after GUI creation
 task.spawn(function()
@@ -902,6 +1025,8 @@ local function showJack4LifeAnimation()
     
     -- Animation sequence
     local function startAnimation()
+        print("Starting Jack4Life text animation...")
+        
         -- Fade in background
         background.BackgroundTransparency = 1
         local fadeIn = TweenService:Create(
@@ -986,7 +1111,16 @@ local function showJack4LifeAnimation()
         toggleUIBtn.Visible = true
         teleportToggleBtn.Visible = true
         
-        print("Animation complete - GUIs are now visible!")
+        -- Now create the FOV circle since animation is done
+        fovCircle = Drawing.new("Circle")
+        fovCircle.Color = Color3.fromRGB(0, 170, 255)
+        fovCircle.Thickness = 2
+        fovCircle.NumSides = 64
+        fovCircle.Radius = aimFOV
+        fovCircle.Filled = false
+        fovCircle.Visible = fovVisible
+        
+        print("Jack4Life animation complete - GUIs are now visible!")
     end
     
     -- Start the animation
@@ -1606,9 +1740,11 @@ RunService.RenderStepped:Connect(function()
         updateFOVSlider()
     end
 
-    fovCircle.Position = camera.ViewportSize / 2
-    fovCircle.Radius = aimFOV
-    fovCircle.Visible = fovVisible
+    if fovCircle then
+        fovCircle.Position = camera.ViewportSize / 2
+        fovCircle.Radius = aimFOV
+        fovCircle.Visible = fovVisible
+    end
 
     -- NEW: Auto Teleport functionality with custom distance
     local currentTime = tick()
@@ -1656,12 +1792,28 @@ end
 -- Initialize hitboxes
 updateAllZombies()
 
--- Start the animation
+-- Start the animation sequence
 task.spawn(function()
-    wait(0.5) -- Small delay to ensure everything is loaded
-    showJack4LifeAnimation()
+    wait(0.5) -- Initial delay
+    
+    print("Starting Video Intro Animation (4 seconds)...")
+    
+    -- Play the video animation
+    local videoAnimation = playVideoIntro()
+    local videoSuccess = videoAnimation()
+    
+    if videoSuccess then
+        print("Video completed, starting Jack4Life Animation...")
+        
+        -- Immediately start the Jack4Life animation
+        showJack4LifeAnimation()
+    else
+        -- If video fails, just show the text animation
+        print("Video animation failed, showing Jack4Life Animation directly...")
+        showJack4LifeAnimation()
+    end
 end)
 
 print("Script loaded successfully! Made By Jack4Life")
-print("Animation playing - GUIs will appear after animation ends")
+print("Video intro animation playing for 4 seconds - then text animation - then GUI will appear")
 print("Click the TP button on the right side for teleport controls")
