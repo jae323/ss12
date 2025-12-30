@@ -1,0 +1,1819 @@
+--// SMART SPECIAL KILLING AIM LOCK SCRIPT WITH FOV + CLASSIC GUI SYSTEM + WALL CHECK + HITBOX + TELEPORT //--
+--// WITH MODERN CUSTOM AUTO TELEPORT DISTANCE AND ANIMATED TEXT BY Jack4Life //--
+--// NOW WITH VIDEO INTRO ANIMATION //--
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local camera = workspace.CurrentCamera
+local player = Players.LocalPlayer
+
+-- Config
+local aimPartName = "Head"
+local zombiesFolder = workspace:WaitForChild("Zombies")
+
+-- State
+local aimLockActive = false
+local aimFOV = 100
+local draggingSlider = false
+local uiVisible = false -- Start hidden until animation ends
+local fovVisible = true
+local espVisible = false
+local wallCheckEnabled = true
+local hitboxEnabled = false
+
+-- NEW: Print Cash feature
+local printCashEnabled = false
+
+-- NEW: Teleport variables
+local autoTeleportEnabled = false
+local teleportDistance = 30
+local teleportCooldown = 0.3
+local lastTeleportTime = 0
+local teleportTarget = nil
+local teleportBasePosition = nil
+
+-- NEW: Teleport distance adjustment variables
+local teleportVerticalOffset = 0 -- For up/down adjustment
+local teleportHorizontalOffset = 0 -- For left/right adjustment
+local teleportLoopDistance = 5 -- How far to loop around zombie
+
+-- NEW: Teleport GUI variables
+local teleportUIVisible = false
+local teleportToggleBtn = nil
+
+-- NEW: Boss ignore system - SIMPLIFIED
+local bossIgnoreEnabled = false -- Manual boss ignore toggle
+local lastBossTarget = nil -- Store last boss target for quick re-targeting
+
+-- NEW: Smooth aiming variables
+local smoothAimEnabled = false
+local smoothnessAmount = 1.5 -- Default smoothness
+local lastCameraCFrame = camera.CFrame
+
+-- NEW: Immediate aim after teleport
+local immediateAimAfterTeleport = true
+
+-- NEW: Last teleported target for aimbot
+local lastTeleportedTarget = nil
+local lastTeleportTimestamp = 0
+local TARGET_LOCK_DURATION = 3 -- How long to keep targeting the teleported zombie
+
+-- ESP storage
+local espObjects = {}
+
+-- Platform detection
+local isPC = UserInputService:GetPlatform() == Enum.Platform.Windows
+local aimbindKey = Enum.KeyCode.Q -- Default keybind for PC
+local waitingForKeybind = false
+
+-- Modern color scheme
+local colors = {
+    background = Color3.fromRGB(25, 25, 35),
+    header = Color3.fromRGB(40, 40, 50),
+    accent = Color3.fromRGB(0, 170, 255),
+    text = Color3.fromRGB(240, 240, 240),
+    button = Color3.fromRGB(50, 50, 60),
+    buttonHover = Color3.fromRGB(60, 60, 75),
+    toggleOff = Color3.fromRGB(80, 80, 90),
+    toggleOn = Color3.fromRGB(0, 200, 100),
+    sliderTrack = Color3.fromRGB(60, 60, 70),
+    sliderFill = Color3.fromRGB(0, 160, 255),
+    border = Color3.fromRGB(20, 20, 30),
+    teleportAccent = Color3.fromRGB(255, 120, 50),
+    neonBlue = Color3.fromRGB(0, 200, 255),
+    neonPink = Color3.fromRGB(255, 50, 150),
+    neonGreen = Color3.fromRGB(50, 255, 100),
+    darkGlass = Color3.fromRGB(30, 30, 40)
+}
+
+-- ESP colors
+local espColors = {
+    normal = Color3.fromRGB(255, 50, 50),          -- Red for normal zombies
+    SniperZombie = Color3.fromRGB(0, 255, 0),      -- Green
+    Hunter = Color3.fromRGB(0, 0, 255),            -- Blue
+    Boss = Color3.fromRGB(255, 165, 0),            -- Orange
+    Destroyer = Color3.fromRGB(128, 0, 128)        -- Purple
+}
+
+----------------------------------------------------------------
+-- VIDEO INTRO ANIMATION - FULL SCREEN COVER
+----------------------------------------------------------------
+local function playVideoIntro()
+    -- Create the video GUI
+    local videoGui = Instance.new("ScreenGui")
+    videoGui.Name = "VideoIntroGui"
+    videoGui.ResetOnSpawn = false
+    videoGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    videoGui.Parent = player:WaitForChild("PlayerGui")
+    
+    -- Create a fullscreen black background (in case video fails)
+    local background = Instance.new("Frame")
+    background.Size = UDim2.new(1, 0, 1, 0)
+    background.Position = UDim2.new(0, 0, 0, 0)
+    background.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    background.BackgroundTransparency = 0
+    background.ZIndex = 900
+    background.Parent = videoGui
+    
+    -- Create VideoFrame to play the video
+    local videoFrame = Instance.new("VideoFrame")
+    videoFrame.Size = UDim2.new(1, 0, 1, 0)
+    videoFrame.Position = UDim2.new(0, 0, 0, 0)
+    videoFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    videoFrame.ZIndex = 901
+    videoFrame.Parent = background
+    
+    -- Set video properties
+    videoFrame.Video = "rbxassetid://5608333583" -- Your video ID
+    videoFrame.Looped = false
+    videoFrame.Volume = 1 -- Set volume to 100%
+    
+    -- Loading text (in case video takes time to load)
+    local loadingText = Instance.new("TextLabel")
+    loadingText.Size = UDim2.new(1, 0, 0.1, 0)
+    loadingText.Position = UDim2.new(0, 0, 0.5, -20)
+    loadingText.BackgroundTransparency = 1
+    loadingText.Text = "Loading Intro Video..."
+    loadingText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    loadingText.Font = Enum.Font.GothamBold
+    loadingText.TextSize = 24
+    loadingText.ZIndex = 902
+    loadingText.TextTransparency = 0
+    loadingText.Parent = background
+    
+    -- Countdown text
+    local countdownText = Instance.new("TextLabel")
+    countdownText.Size = UDim2.new(1, 0, 0.1, 0)
+    countdownText.Position = UDim2.new(0, 0, 0.8, 0)
+    countdownText.BackgroundTransparency = 1
+    countdownText.Text = "Video will play for 4 seconds..."
+    countdownText.TextColor3 = Color3.fromRGB(200, 200, 200)
+    countdownText.Font = Enum.Font.Gotham
+    countdownText.TextSize = 18
+    countdownText.ZIndex = 902
+    countdownText.TextTransparency = 0
+    countdownText.Parent = background
+    
+    -- Animation sequence
+    local function startVideoAnimation()
+        print("Starting video intro animation...")
+        
+        -- Fade in background
+        background.BackgroundTransparency = 1
+        TweenService:Create(
+            background,
+            TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+            {BackgroundTransparency = 0}
+        ):Play()
+        
+        wait(0.5)
+        
+        -- Try to play the video
+        local videoSuccess = pcall(function()
+            videoFrame:Play()
+        end)
+        
+        if videoSuccess then
+            print("Video started playing successfully")
+            -- Fade out loading text after 0.5 seconds
+            wait(0.5)
+            TweenService:Create(
+                loadingText,
+                TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                {TextTransparency = 1}
+            ):Play()
+        else
+            print("Failed to play video, showing fallback animation")
+            -- If video fails, show a simple animation instead
+            loadingText.Text = "Video Loading Failed - Starting in 4 seconds..."
+            wait(1)
+            TweenService:Create(
+                loadingText,
+                TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                {TextTransparency = 1}
+            ):Play()
+        end
+        
+        -- Wait exactly 4 seconds for video to play
+        wait(4)
+        
+        print("4 seconds elapsed - stopping video immediately")
+        
+        -- Immediately stop video
+        pcall(function()
+            videoFrame:Stop()
+        end)
+        
+        -- Immediate fade out (no animation delay)
+        videoFrame.BackgroundTransparency = 1
+        background.BackgroundTransparency = 1
+        countdownText.TextTransparency = 1
+        
+        -- Destroy the video GUI immediately
+        videoGui:Destroy()
+        
+        print("Video animation completed and GUI destroyed")
+        return true
+    end
+    
+    return startVideoAnimation
+end
+
+----------------------------------------------------------------
+-- FIRST, CREATE ALL GUI ELEMENTS (BUT HIDDEN)
+----------------------------------------------------------------
+
+-- Create screen GUI containers
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "ClassicAimLockGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+local teleportToggleGui = Instance.new("ScreenGui")
+teleportToggleGui.Name = "TeleportToggleGui"
+teleportToggleGui.ResetOnSpawn = false
+teleportToggleGui.Parent = player:WaitForChild("PlayerGui")
+
+local teleportGui = Instance.new("ScreenGui")
+teleportGui.Name = "CompactTeleportControlGui"
+teleportGui.ResetOnSpawn = false
+teleportGui.Parent = player:WaitForChild("PlayerGui")
+
+----------------------------------------------------------------
+-- CREATE MAIN GUI (BUT HIDDEN INITIALLY)
+----------------------------------------------------------------
+
+-- Main Container Frame
+local mainContainer = Instance.new("Frame")
+mainContainer.Size = UDim2.new(0, 320, 0, 500)
+mainContainer.Position = UDim2.new(0.5, -160, 0.5, -250)
+mainContainer.BackgroundTransparency = 1
+mainContainer.Visible = false -- Start hidden
+mainContainer.Parent = screenGui
+
+-- Classic frame with border
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(1, 0, 1, 0)
+mainFrame.Position = UDim2.new(0, 0, 0, 0)
+mainFrame.BackgroundColor3 = colors.background
+mainFrame.BorderSizePixel = 1
+mainFrame.BorderColor3 = colors.border
+mainFrame.Parent = mainContainer
+
+-- Header
+local header = Instance.new("Frame")
+header.Size = UDim2.new(1, 0, 0, 35)
+header.Position = UDim2.new(0, 0, 0, 0)
+header.BackgroundColor3 = colors.header
+header.BorderSizePixel = 1
+header.BorderColor3 = colors.border
+header.Parent = mainFrame
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -40, 1, 0)
+title.Position = UDim2.new(0, 10, 0, 0)
+title.BackgroundTransparency = 1
+title.Text = "ZOMBIE AIMBOT v3.0"
+title.TextColor3 = colors.text
+title.Font = Enum.Font.GothamBold
+title.TextSize = 16
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = header
+
+-- Close button
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 25, 0, 25)
+closeBtn.Position = UDim2.new(1, -30, 0, 5)
+closeBtn.BackgroundTransparency = 1
+closeBtn.Text = "✕"
+closeBtn.TextColor3 = colors.text
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 16
+closeBtn.Parent = header
+
+-- IMPROVED Scrolling Frame for Main GUI
+local mainScrollingFrame = Instance.new("ScrollingFrame")
+mainScrollingFrame.Size = UDim2.new(1, -10, 1, -45)
+mainScrollingFrame.Position = UDim2.new(0, 5, 0, 40)
+mainScrollingFrame.BackgroundTransparency = 1
+mainScrollingFrame.ScrollBarThickness = 10
+mainScrollingFrame.ScrollBarImageColor3 = colors.accent
+mainScrollingFrame.ScrollBarImageTransparency = 0.3
+mainScrollingFrame.VerticalScrollBarInset = Enum.ScrollBarInset.Always
+mainScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+mainScrollingFrame.Parent = mainFrame
+
+-- Main content container
+local mainContent = Instance.new("Frame")
+mainContent.Size = UDim2.new(1, 0, 0, 0)
+mainContent.BackgroundTransparency = 1
+mainContent.Parent = mainScrollingFrame
+
+local contentLayout = Instance.new("UIListLayout")
+contentLayout.Padding = UDim.new(0, 10)
+contentLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+contentLayout.Parent = mainContent
+
+-- Function to update scrolling frame size
+local function updateScrollSize()
+    local contentSize = contentLayout.AbsoluteContentSize
+    mainContent.Size = UDim2.new(1, 0, 0, contentSize.Y)
+    mainScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, contentSize.Y + 20)
+end
+
+contentLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateScrollSize)
+
+-- Classic button creation function
+local function createClassicButton(parent, text, size, callback)
+    local button = Instance.new("TextButton")
+    button.Size = size
+    button.BackgroundColor3 = colors.button
+    button.BorderSizePixel = 1
+    button.BorderColor3 = colors.border
+    button.Text = text
+    button.TextColor3 = colors.text
+    button.Font = Enum.Font.Gotham
+    button.TextSize = 14
+    button.AutoButtonColor = false
+    button.Parent = parent
+    
+    -- Hover effect
+    button.MouseEnter:Connect(function()
+        button.BackgroundColor3 = colors.buttonHover
+    end)
+    
+    button.MouseLeave:Connect(function()
+        button.BackgroundColor3 = colors.button
+    end)
+    
+    button.MouseButton1Click:Connect(callback)
+    
+    return button
+end
+
+-- Classic toggle button creation function
+local function createClassicToggle(text, defaultState, callback)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(0.95, 0, 0, 35)
+    container.BackgroundTransparency = 1
+    container.Parent = mainContent
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0.7, 0, 1, 0)
+    label.Position = UDim2.new(0, 0, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.TextColor3 = colors.text
+    label.Font = Enum.Font.Gotham
+    label.TextSize = 14
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = container
+    
+    local toggle = Instance.new("TextButton")
+    toggle.Size = UDim2.new(0.25, 0, 0.7, 0)
+    toggle.Position = UDim2.new(0.75, 0, 0.15, 0)
+    toggle.BackgroundColor3 = defaultState and colors.toggleOn or colors.toggleOff
+    toggle.BorderSizePixel = 1
+    toggle.BorderColor3 = colors.border
+    toggle.Text = defaultState and "ON" or "OFF"
+    toggle.TextColor3 = colors.text
+    toggle.Font = Enum.Font.GothamBold
+    toggle.TextSize = 12
+    toggle.AutoButtonColor = false
+    toggle.Parent = container
+    
+    toggle.MouseButton1Click:Connect(function()
+        local newState = not defaultState
+        defaultState = newState
+        toggle.BackgroundColor3 = newState and colors.toggleOn or colors.toggleOff
+        toggle.Text = newState and "ON" or "OFF"
+        callback(newState)
+    end)
+    
+    return toggle
+end
+
+-- Create UI elements with classic design
+local aimlockToggle = createClassicToggle("AimLock", aimLockActive, function(state)
+    aimLockActive = state
+end)
+
+-- NEW: IMPROVED Boss Ignore Toggle
+local bossIgnoreToggle = createClassicToggle("Ignore Boss", bossIgnoreEnabled, function(state)
+    bossIgnoreEnabled = state
+    if state then
+        print("Boss Ignore: ON - Aimbot and Teleport will ignore Boss zombies")
+        -- Store current boss target if it exists
+        if teleportTarget and isBossZombie(teleportTarget) then
+            lastBossTarget = teleportTarget
+        end
+        -- Clear current teleport target if it's a boss
+        if teleportTarget and isBossZombie(teleportTarget) then
+            teleportTarget = nil
+            print("Cleared current Boss teleport target, finding new target...")
+        end
+    else
+        print("Boss Ignore: OFF - Aimbot and Teleport will target Boss zombies")
+        -- Clear teleport target to force re-evaluation
+        teleportTarget = nil
+        print("Boss ignore disabled - will target Boss if available")
+    end
+end)
+
+-- NEW: Print Cash Toggle
+local printCashToggle = createClassicToggle("Print Cash Mode", printCashEnabled, function(state)
+    printCashEnabled = state
+    if state then
+        aimPartName = "Torso"
+        print("Print Cash Mode: ON - Targeting Torso")
+    else
+        aimPartName = "Head"
+        print("Print Cash Mode: OFF - Targeting Head")
+    end
+    -- Update hitboxes when Print Cash mode changes
+    updateAllZombies()
+end)
+
+-- NEW: Teleport Toggle
+local teleportToggle = createClassicToggle("Auto Teleport", autoTeleportEnabled, function(state)
+    autoTeleportEnabled = state
+    
+    -- Set teleport base position when turning ON
+    if autoTeleportEnabled and player.Character then
+        local humanoidRootPart = player.Character:FindFirstChild("HumanoidRootPart")
+        if humanoidRootPart then
+            teleportBasePosition = humanoidRootPart.Position
+            teleportTarget = nil -- Reset target to find new closest
+            print("Teleport base position set: " .. tostring(teleportBasePosition))
+        end
+    elseif not autoTeleportEnabled then
+        teleportBasePosition = nil
+        teleportTarget = nil
+        lastTeleportedTarget = nil -- Clear last teleported target
+    end
+end)
+
+local fovToggle = createClassicToggle("FOV Circle", fovVisible, function(state)
+    fovVisible = state
+    if fovCircle then
+        fovCircle.Visible = state
+    end
+end)
+
+local espToggle = createClassicToggle("Zombie ESP", espVisible, function(state)
+    espVisible = state
+    updateESP()
+end)
+
+local wallCheckToggle = createClassicToggle("Wall Check", wallCheckEnabled, function(state)
+    wallCheckEnabled = state
+end)
+
+local hitboxToggle = createClassicToggle("Expand Hitbox", hitboxEnabled, function(state)
+    hitboxEnabled = state
+    updateAllZombies()
+end)
+
+local smoothAimToggle = createClassicToggle("Smooth Aim", smoothAimEnabled, function(state)
+    smoothAimEnabled = state
+end)
+
+-- FOV Slider
+local sliderContainer = Instance.new("Frame")
+sliderContainer.Size = UDim2.new(0.95, 0, 0, 50)
+sliderContainer.BackgroundTransparency = 1
+sliderContainer.Parent = mainContent
+
+local sliderLabel = Instance.new("TextLabel")
+sliderLabel.Size = UDim2.new(1, 0, 0, 20)
+sliderLabel.Position = UDim2.new(0, 0, 0, 0)
+sliderLabel.BackgroundTransparency = 1
+sliderLabel.Text = "Aim FOV: " .. aimFOV
+sliderLabel.TextColor3 = colors.text
+sliderLabel.Font = Enum.Font.Gotham
+sliderLabel.TextSize = 14
+sliderLabel.TextXAlignment = Enum.TextXAlignment.Left
+sliderLabel.Parent = sliderContainer
+
+local sliderTrack = Instance.new("Frame")
+sliderTrack.Size = UDim2.new(1, 0, 0, 10)
+sliderTrack.Position = UDim2.new(0, 0, 0, 35)
+sliderTrack.BackgroundColor3 = colors.sliderTrack
+sliderTrack.BorderSizePixel = 1
+sliderTrack.BorderColor3 = colors.border
+sliderTrack.Parent = sliderContainer
+
+local sliderFill = Instance.new("Frame")
+sliderFill.Size = UDim2.new((aimFOV - 20)/280, 0, 1, 0)
+sliderFill.BackgroundColor3 = colors.sliderFill
+sliderFill.BorderSizePixel = 0
+sliderFill.Parent = sliderTrack
+
+local sliderKnob = Instance.new("Frame")
+sliderKnob.Size = UDim2.new(0, 18, 0, 18)
+sliderKnob.Position = UDim2.new((aimFOV - 20)/280, -9, 0.5, -9)
+sliderKnob.BackgroundColor3 = colors.text
+sliderKnob.BorderSizePixel = 1
+sliderKnob.BorderColor3 = colors.border
+sliderKnob.Parent = sliderTrack
+
+local function updateFOVSlider()
+    sliderFill.Size = UDim2.new((aimFOV - 20)/280, 0, 1, 0)
+    sliderKnob.Position = UDim2.new((aimFOV - 20)/280, -9, 0.5, -9)
+    sliderLabel.Text = "Aim FOV: " .. aimFOV
+    if fovCircle then
+        fovCircle.Radius = aimFOV
+    end
+end
+
+sliderTrack.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        draggingSlider = true
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if draggingSlider and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local mouseX = UserInputService:GetMouseLocation().X
+        local sliderX = sliderTrack.AbsolutePosition.X
+        local sliderWidth = sliderTrack.AbsoluteSize.X
+        local relativeX = math.clamp(mouseX - sliderX, 0, sliderWidth)
+        
+        aimFOV = math.floor(20 + (relativeX/sliderWidth) * 280)
+        updateFOVSlider()
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        draggingSlider = false
+    end
+end)
+
+-- Smoothness Selection
+local smoothnessContainer = Instance.new("Frame")
+smoothnessContainer.Size = UDim2.new(0.95, 0, 0, 45)
+smoothnessContainer.BackgroundTransparency = 1
+smoothnessContainer.Parent = mainContent
+
+local smoothnessLabel = Instance.new("TextLabel")
+smoothnessLabel.Size = UDim2.new(1, 0, 0, 20)
+smoothnessLabel.Position = UDim2.new(0, 0, 0, 0)
+smoothnessLabel.BackgroundTransparency = 1
+smoothnessLabel.Text = "Smoothness: " .. smoothnessAmount
+smoothnessLabel.TextColor3 = colors.text
+smoothnessLabel.Font = Enum.Font.Gotham
+smoothnessLabel.TextSize = 14
+smoothnessLabel.TextXAlignment = Enum.TextXAlignment.Left
+smoothnessLabel.Parent = smoothnessContainer
+
+local smoothness15Btn = createClassicButton(
+    smoothnessContainer,
+    "1.5",
+    UDim2.new(0.3, 0, 0, 25),
+    function()
+        smoothnessAmount = 1.5
+        smoothnessLabel.Text = "Smoothness: " .. smoothnessAmount
+        smoothness15Btn.BackgroundColor3 = colors.accent
+        smoothness20Btn.BackgroundColor3 = colors.button
+        smoothness25Btn.BackgroundColor3 = colors.button
+    end
+)
+smoothness15Btn.Position = UDim2.new(0, 0, 0, 20)
+smoothness15Btn.BackgroundColor3 = smoothnessAmount == 1.5 and colors.accent or colors.button
+
+local smoothness20Btn = createClassicButton(
+    smoothnessContainer,
+    "2.0",
+    UDim2.new(0.3, 0, 0, 25),
+    function()
+        smoothnessAmount = 2.0
+        smoothnessLabel.Text = "Smoothness: " .. smoothnessAmount
+        smoothness15Btn.BackgroundColor3 = colors.button
+        smoothness20Btn.BackgroundColor3 = colors.accent
+        smoothness25Btn.BackgroundColor3 = colors.button
+    end
+)
+smoothness20Btn.Position = UDim2.new(0.35, 0, 0, 20)
+smoothness20Btn.BackgroundColor3 = smoothnessAmount == 2.0 and colors.accent or colors.button
+
+local smoothness25Btn = createClassicButton(
+    smoothnessContainer,
+    "2.5",
+    UDim2.new(0.3, 0, 0, 25),
+    function()
+        smoothnessAmount = 2.5
+        smoothnessLabel.Text = "Smoothness: " .. smoothnessAmount
+        smoothness15Btn.BackgroundColor3 = colors.button
+        smoothness20Btn.BackgroundColor3 = colors.button
+        smoothness25Btn.BackgroundColor3 = colors.accent
+    end
+)
+smoothness25Btn.Position = UDim2.new(0.7, 0, 0, 20)
+smoothness25Btn.BackgroundColor3 = smoothnessAmount == 2.5 and colors.accent or colors.button
+
+-- Add some spacing
+local spacer1 = Instance.new("Frame")
+spacer1.Size = UDim2.new(0.95, 0, 0, 5)
+spacer1.BackgroundTransparency = 1
+spacer1.Parent = mainContent
+
+-- Info section
+local infoContainer = Instance.new("Frame")
+infoContainer.Size = UDim2.new(0.95, 0, 0, 80)
+infoContainer.BackgroundTransparency = 1
+infoContainer.Parent = mainContent
+
+local infoLabel = Instance.new("TextLabel")
+infoLabel.Size = UDim2.new(1, 0, 1, 0)
+infoLabel.BackgroundTransparency = 1
+infoLabel.Text = "Teleport Priority:\n1. SniperZombie\n2. Boss (when not ignored)\n3. Destroyer\n4. Hunter\n5. Closest Zombie\n\nUse Teleport Controls on right!"
+infoLabel.TextColor3 = colors.text
+infoLabel.Font = Enum.Font.Gotham
+infoLabel.TextSize = 12
+infoLabel.TextXAlignment = Enum.TextXAlignment.Left
+infoLabel.TextYAlignment = Enum.TextYAlignment.Top
+infoLabel.Parent = infoContainer
+
+-- Footer with Made By text
+local footer = Instance.new("Frame")
+footer.Size = UDim2.new(1, 0, 0, 30)
+footer.Position = UDim2.new(0, 0, 1, -30)
+footer.BackgroundTransparency = 1
+footer.Parent = mainFrame
+
+local footerLabel = Instance.new("TextLabel")
+footerLabel.Size = UDim2.new(1, 0, 1, 0)
+footerLabel.BackgroundTransparency = 1
+footerLabel.Text = "Made By Jack4Life"
+footerLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+footerLabel.Font = Enum.Font.Gotham
+footerLabel.TextSize = 12
+footerLabel.TextXAlignment = Enum.TextXAlignment.Center
+footerLabel.Parent = footer
+
+-- UI Toggle Button (outside main frame)
+local toggleUIBtn = createClassicButton(
+    screenGui,
+    "Hide UI",
+    UDim2.new(0, 100, 0, 35),
+    function()
+        uiVisible = not uiVisible
+        mainContainer.Visible = uiVisible
+        toggleUIBtn.Text = uiVisible and "Hide UI" or "Show UI"
+    end
+)
+toggleUIBtn.Position = UDim2.new(0, 10, 0, 10)
+toggleUIBtn.Visible = false -- Start hidden
+
+-- FOV Circle Drawing (created later after animation)
+local fovCircle = nil
+
+-- Force update scroll size after GUI creation
+task.spawn(function()
+    wait(0.5)
+    updateScrollSize()
+end)
+
+----------------------------------------------------------------
+-- CREATE TELEPORT GUI TOGGLE BUTTON (HIDDEN INITIALLY)
+----------------------------------------------------------------
+
+-- Modern toggle button for teleport controls
+teleportToggleBtn = Instance.new("TextButton")
+teleportToggleBtn.Name = "TeleportToggleButton"
+teleportToggleBtn.Size = UDim2.new(0, 50, 0, 50)
+teleportToggleBtn.Position = UDim2.new(1, -60, 0.5, -25)
+teleportToggleBtn.BackgroundColor3 = colors.teleportAccent
+teleportToggleBtn.AutoButtonColor = false
+teleportToggleBtn.Text = "TP"
+teleportToggleBtn.TextColor3 = colors.text
+teleportToggleBtn.Font = Enum.Font.GothamBold
+teleportToggleBtn.TextSize = 16
+teleportToggleBtn.Visible = false -- Start hidden
+teleportToggleBtn.Parent = teleportToggleGui
+
+-- Add rounded corners
+local toggleCorner = Instance.new("UICorner")
+toggleCorner.CornerRadius = UDim.new(0.3, 0)
+toggleCorner.Parent = teleportToggleBtn
+
+-- Add shadow
+local toggleShadow = Instance.new("UIStroke")
+toggleShadow.Color = Color3.fromRGB(0, 0, 0)
+toggleShadow.Thickness = 2
+toggleShadow.Transparency = 0.3
+toggleShadow.Parent = teleportToggleBtn
+
+-- Hover effect
+teleportToggleBtn.MouseEnter:Connect(function()
+    TweenService:Create(
+        teleportToggleBtn,
+        TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        {
+            BackgroundColor3 = Color3.fromRGB(255, 140, 60),
+            Size = UDim2.new(0, 55, 0, 55)
+        }
+    ):Play()
+end)
+
+teleportToggleBtn.MouseLeave:Connect(function()
+    TweenService:Create(
+        teleportToggleBtn,
+        TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        {
+            BackgroundColor3 = colors.teleportAccent,
+            Size = UDim2.new(0, 50, 0, 50)
+        }
+    ):Play()
+end)
+
+----------------------------------------------------------------
+-- CREATE COMPACT TELEPORT DISTANCE GUI (HIDDEN INITIALLY)
+----------------------------------------------------------------
+
+-- Compact Teleport Container
+local teleportContainer = Instance.new("Frame")
+teleportContainer.Size = UDim2.new(0, 160, 0, 320)
+teleportContainer.Position = UDim2.new(1, -170, 0.5, -160)
+teleportContainer.BackgroundColor3 = colors.darkGlass
+teleportContainer.BackgroundTransparency = 0.1
+teleportContainer.BorderSizePixel = 0
+teleportContainer.Visible = false
+teleportContainer.Parent = teleportGui
+
+-- Rounded corners
+local teleportCorner = Instance.new("UICorner")
+teleportCorner.CornerRadius = UDim.new(0.05, 0)
+teleportCorner.Parent = teleportContainer
+
+-- Header
+local teleportHeader = Instance.new("Frame")
+teleportHeader.Size = UDim2.new(1, 0, 0, 40)
+teleportHeader.Position = UDim2.new(0, 0, 0, 0)
+teleportHeader.BackgroundTransparency = 1
+teleportHeader.Parent = teleportContainer
+
+local teleportTitle = Instance.new("TextLabel")
+teleportTitle.Size = UDim2.new(1, -10, 1, 0)
+teleportTitle.Position = UDim2.new(0, 5, 0, 0)
+teleportTitle.BackgroundTransparency = 1
+teleportTitle.Text = "TELEPORT CONTROLS"
+teleportTitle.TextColor3 = colors.text
+teleportTitle.Font = Enum.Font.GothamBold
+teleportTitle.TextSize = 14
+teleportTitle.TextXAlignment = Enum.TextXAlignment.Left
+teleportTitle.Parent = teleportHeader
+
+-- Close button
+local teleportCloseBtn = Instance.new("TextButton")
+teleportCloseBtn.Size = UDim2.new(0, 25, 0, 25)
+teleportCloseBtn.Position = UDim2.new(1, -30, 0.5, -12.5)
+teleportCloseBtn.BackgroundTransparency = 1
+teleportCloseBtn.Text = "✕"
+teleportCloseBtn.TextColor3 = colors.text
+teleportCloseBtn.Font = Enum.Font.GothamBold
+teleportCloseBtn.TextSize = 18
+teleportCloseBtn.Parent = teleportHeader
+
+-- Content Frame
+local teleportContent = Instance.new("Frame")
+teleportContent.Size = UDim2.new(1, -10, 1, -80)
+teleportContent.Position = UDim2.new(0, 5, 0, 45)
+teleportContent.BackgroundTransparency = 1
+teleportContent.Parent = teleportContainer
+
+local teleportLayout = Instance.new("UIListLayout")
+teleportLayout.Padding = UDim.new(0, 8)
+teleportLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+teleportLayout.Parent = teleportContent
+
+-- Create compact control buttons function
+local function createCompactButton(text, callback, color)
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(1, 0, 0, 28)
+    button.BackgroundColor3 = color or colors.button
+    button.BackgroundTransparency = 0.1
+    button.AutoButtonColor = false
+    button.Text = text
+    button.TextColor3 = colors.text
+    button.Font = Enum.Font.Gotham
+    button.TextSize = 12
+    button.Parent = teleportContent
+    
+    -- Rounded corners
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0.1, 0)
+    corner.Parent = button
+    
+    -- Stroke
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(100, 100, 120)
+    stroke.Thickness = 1
+    stroke.Transparency = 0.5
+    stroke.Parent = button
+    
+    -- Hover effect
+    button.MouseEnter:Connect(function()
+        TweenService:Create(
+            button,
+            TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+            {
+                BackgroundTransparency = 0,
+                BackgroundColor3 = Color3.fromRGB(
+                    math.min(color.R * 255 + 20, 255),
+                    math.min(color.G * 255 + 20, 255),
+                    math.min(color.B * 255 + 20, 255)
+                )
+            }
+        ):Play()
+    end)
+    
+    button.MouseLeave:Connect(function()
+        TweenService:Create(
+            button,
+            TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+            {
+                BackgroundTransparency = 0.1,
+                BackgroundColor3 = color or colors.button
+            }
+        ):Play()
+    end)
+    
+    button.MouseButton1Click:Connect(callback)
+    
+    return button
+end
+
+-- Distance display
+local distanceValue = 30
+local distanceLabel = Instance.new("TextLabel")
+distanceLabel.Size = UDim2.new(1, 0, 0, 25)
+distanceLabel.BackgroundTransparency = 1
+distanceLabel.Text = "DISTANCE: " .. distanceValue
+distanceLabel.TextColor3 = colors.accent
+distanceLabel.Font = Enum.Font.GothamBold
+distanceLabel.TextSize = 14
+distanceLabel.Parent = teleportContent
+
+-- Height display
+local heightValue = 0
+local heightLabel = Instance.new("TextLabel")
+heightLabel.Size = UDim2.new(1, 0, 0, 20)
+heightLabel.BackgroundTransparency = 1
+heightLabel.Text = "HEIGHT: " .. heightValue
+heightLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+heightLabel.Font = Enum.Font.Gotham
+heightLabel.TextSize = 12
+heightLabel.Parent = teleportContent
+
+-- Create control buttons
+local closerButton = createCompactButton("← CLOSER", function()
+    if teleportDistance > 5 then
+        teleportDistance = teleportDistance - 2
+        distanceValue = teleportDistance
+        distanceLabel.Text = "DISTANCE: " .. distanceValue
+        print("Teleport Distance: " .. teleportDistance)
+    end
+end, Color3.fromRGB(0, 100, 200))
+
+local furtherButton = createCompactButton("FURTHER →", function()
+    if teleportDistance < 100 then
+        teleportDistance = teleportDistance + 2
+        distanceValue = teleportDistance
+        distanceLabel.Text = "DISTANCE: " .. distanceValue
+        print("Teleport Distance: " .. teleportDistance)
+    end
+end, Color3.fromRGB(200, 100, 0))
+
+local upButton = createCompactButton("↑ HEIGHT +", function()
+    teleportVerticalOffset = teleportVerticalOffset + 2
+    heightValue = teleportVerticalOffset
+    heightLabel.Text = "HEIGHT: " .. heightValue
+    print("Teleport Height: " .. teleportVerticalOffset)
+end, Color3.fromRGB(0, 150, 0))
+
+local downButton = createCompactButton("↓ HEIGHT -", function()
+    teleportVerticalOffset = teleportVerticalOffset - 2
+    heightValue = teleportVerticalOffset
+    heightLabel.Text = "HEIGHT: " .. heightValue
+    print("Teleport Height: " .. teleportVerticalOffset)
+end, Color3.fromRGB(150, 0, 0))
+
+local offsetLeftButton = createCompactButton("← LEFT", function()
+    teleportHorizontalOffset = teleportHorizontalOffset - 2
+    print("Horizontal Offset: " .. teleportHorizontalOffset)
+end, Color3.fromRGB(100, 100, 0))
+
+local offsetRightButton = createCompactButton("RIGHT →", function()
+    teleportHorizontalOffset = teleportHorizontalOffset + 2
+    print("Horizontal Offset: " .. teleportHorizontalOffset)
+end, Color3.fromRGB(100, 100, 0))
+
+local loopIncreaseButton = createCompactButton("LOOP +", function()
+    if teleportLoopDistance < 20 then
+        teleportLoopDistance = teleportLoopDistance + 1
+        print("Loop Distance: " .. teleportLoopDistance)
+    end
+end, Color3.fromRGB(150, 0, 150))
+
+local loopDecreaseButton = createCompactButton("LOOP -", function()
+    if teleportLoopDistance > 1 then
+        teleportLoopDistance = teleportLoopDistance - 1
+        print("Loop Distance: " .. teleportLoopDistance)
+    end
+end, Color3.fromRGB(150, 0, 150))
+
+-- RESET BUTTON
+local resetButton = createCompactButton("RESET ALL", function()
+    teleportDistance = 30
+    teleportVerticalOffset = 0
+    teleportHorizontalOffset = 0
+    teleportLoopDistance = 5
+    distanceValue = 30
+    heightValue = 0
+    distanceLabel.Text = "DISTANCE: " .. distanceValue
+    heightLabel.Text = "HEIGHT: " .. heightValue
+    print("Teleport values reset to defaults")
+end, Color3.fromRGB(255, 50, 50))
+
+-- Footer with Made By text
+local teleportFooter = Instance.new("Frame")
+teleportFooter.Size = UDim2.new(1, 0, 0, 25)
+teleportFooter.Position = UDim2.new(0, 0, 1, -25)
+teleportFooter.BackgroundTransparency = 1
+teleportFooter.Parent = teleportContainer
+
+local madeByLabel = Instance.new("TextLabel")
+madeByLabel.Size = UDim2.new(1, 0, 1, 0)
+madeByLabel.BackgroundTransparency = 1
+madeByLabel.Text = "Made By Jack4Life"
+madeByLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+madeByLabel.Font = Enum.Font.Gotham
+madeByLabel.TextSize = 10
+madeByLabel.TextXAlignment = Enum.TextXAlignment.Center
+madeByLabel.Parent = teleportFooter
+
+----------------------------------------------------------------
+-- MODERN ANIMATED TEXT FUNCTION (MADE BY Jack4Life)
+----------------------------------------------------------------
+local function showJack4LifeAnimation()
+    -- Create the animation GUI
+    local animationGui = Instance.new("ScreenGui")
+    animationGui.Name = "Jack4LifeAnimation"
+    animationGui.ResetOnSpawn = false
+    animationGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    animationGui.Parent = player:WaitForChild("PlayerGui")
+    
+    -- Create a fullscreen background
+    local background = Instance.new("Frame")
+    background.Size = UDim2.new(1, 0, 1, 0)
+    background.Position = UDim2.new(0, 0, 0, 0)
+    background.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    background.BackgroundTransparency = 0
+    background.ZIndex = 1000
+    background.Parent = animationGui
+    
+    -- Create "Made By" text with large font
+    local madeByText = Instance.new("TextLabel")
+    madeByText.Name = "MadeByText"
+    madeByText.Size = UDim2.new(1, 0, 0.3, 0)
+    madeByText.Position = UDim2.new(0, 0, 0.2, 0)
+    madeByText.BackgroundTransparency = 1
+    madeByText.Text = "MADE BY"
+    madeByText.TextColor3 = Color3.fromRGB(220, 220, 220)
+    madeByText.Font = Enum.Font.GothamBlack
+    madeByText.TextSize = 60
+    madeByText.TextStrokeTransparency = 0.5
+    madeByText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    madeByText.ZIndex = 1001
+    madeByText.TextTransparency = 1
+    madeByText.TextXAlignment = Enum.TextXAlignment.Center
+    madeByText.TextYAlignment = Enum.TextYAlignment.Center
+    madeByText.Parent = background
+    
+    -- Create "Jack4Life" text with gradient
+    local jackText = Instance.new("TextLabel")
+    jackText.Name = "JackText"
+    jackText.Size = UDim2.new(1, 0, 0.4, 0)
+    jackText.Position = UDim2.new(0, 0, 0.4, 0)
+    jackText.BackgroundTransparency = 1
+    jackText.Text = "JACK4LIFE"
+    jackText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    jackText.Font = Enum.Font.GothamBlack
+    jackText.TextSize = 100
+    jackText.TextStrokeTransparency = 0.3
+    jackText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    jackText.ZIndex = 1001
+    jackText.TextTransparency = 1
+    jackText.TextXAlignment = Enum.TextXAlignment.Center
+    jackText.TextYAlignment = Enum.TextYAlignment.Center
+    jackText.Parent = background
+    
+    -- Add gradient to Jack4Life text
+    local textGradient = Instance.new("UIGradient")
+    textGradient.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, colors.neonBlue),
+        ColorSequenceKeypoint.new(0.5, colors.neonPink),
+        ColorSequenceKeypoint.new(1, colors.neonGreen)
+    }
+    textGradient.Rotation = 90
+    textGradient.Enabled = false
+    textGradient.Parent = jackText
+    
+    -- Animation sequence
+    local function startAnimation()
+        print("Starting Jack4Life text animation...")
+        
+        -- Fade in background
+        background.BackgroundTransparency = 1
+        local fadeIn = TweenService:Create(
+            background,
+            TweenInfo.new(1, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+            {BackgroundTransparency = 0}
+        )
+        fadeIn:Play()
+        
+        wait(0.5)
+        
+        -- Fade in "MADE BY" text
+        local madeByFadeIn = TweenService:Create(
+            madeByText,
+            TweenInfo.new(1.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+            {TextTransparency = 0}
+        )
+        madeByFadeIn:Play()
+        
+        wait(0.8)
+        
+        -- Fade in "JACK4LIFE" text with scale effect
+        jackText.TextSize = 80
+        local jackFadeIn = TweenService:Create(
+            jackText,
+            TweenInfo.new(2, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out),
+            {
+                TextTransparency = 0,
+                TextSize = 100
+            }
+        )
+        jackFadeIn:Play()
+        
+        -- Enable gradient after fade in
+        wait(0.5)
+        textGradient.Enabled = true
+        
+        -- Animate gradient
+        local gradientAnimation = TweenService:Create(
+            textGradient,
+            TweenInfo.new(3, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1, true),
+            {Rotation = 450}
+        )
+        gradientAnimation:Play()
+        
+        wait(2)
+        
+        -- Fade out all text
+        local textFadeOut = TweenService:Create(
+            madeByText,
+            TweenInfo.new(1, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
+            {TextTransparency = 1}
+        )
+        textFadeOut:Play()
+        
+        local jackFadeOut = TweenService:Create(
+            jackText,
+            TweenInfo.new(1, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
+            {
+                TextTransparency = 1,
+                TextSize = 80
+            }
+        )
+        jackFadeOut:Play()
+        
+        wait(1)
+        
+        -- Fade out background
+        local fadeOut = TweenService:Create(
+            background,
+            TweenInfo.new(0.8, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
+            {BackgroundTransparency = 1}
+        )
+        fadeOut:Play()
+        
+        fadeOut.Completed:Wait()
+        animationGui:Destroy()
+        
+        -- Show GUIs after animation ends
+        uiVisible = true
+        mainContainer.Visible = true
+        toggleUIBtn.Visible = true
+        teleportToggleBtn.Visible = true
+        
+        -- Now create the FOV circle since animation is done
+        fovCircle = Drawing.new("Circle")
+        fovCircle.Color = Color3.fromRGB(0, 170, 255)
+        fovCircle.Thickness = 2
+        fovCircle.NumSides = 64
+        fovCircle.Radius = aimFOV
+        fovCircle.Filled = false
+        fovCircle.Visible = fovVisible
+        
+        print("Jack4Life animation complete - GUIs are now visible!")
+    end
+    
+    -- Start the animation
+    task.spawn(startAnimation)
+end
+
+----------------------------------------------------------------
+-- TELEPORT GUI FUNCTIONALITY
+----------------------------------------------------------------
+
+-- Toggle button functionality
+teleportToggleBtn.MouseButton1Click:Connect(function()
+    teleportUIVisible = not teleportUIVisible
+    
+    if teleportUIVisible then
+        teleportContainer.Visible = true
+        teleportContainer.Position = UDim2.new(1, -170, 0.5, -160)
+        
+        TweenService:Create(
+            teleportToggleBtn,
+            TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+            {
+                Position = UDim2.new(1, -230, 0.5, -25),
+                BackgroundColor3 = Color3.fromRGB(255, 80, 40)
+            }
+        ):Play()
+        
+        teleportToggleBtn.Text = "▼"
+    else
+        TweenService:Create(
+            teleportContainer,
+            TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In),
+            {
+                Position = UDim2.new(1, 10, 0.5, -160)
+            }
+        ):Play()
+        
+        TweenService:Create(
+            teleportToggleBtn,
+            TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+            {
+                Position = UDim2.new(1, -60, 0.5, -25),
+                BackgroundColor3 = colors.teleportAccent
+            }
+        ):Play()
+        
+        teleportToggleBtn.Text = "TP"
+        
+        wait(0.3)
+        if not teleportUIVisible then
+            teleportContainer.Visible = false
+        end
+    end
+end)
+
+-- Close button functionality
+teleportCloseBtn.MouseButton1Click:Connect(function()
+    teleportUIVisible = false
+    
+    TweenService:Create(
+        teleportContainer,
+        TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In),
+        {
+            Position = UDim2.new(1, 10, 0.5, -160)
+        }
+    ):Play()
+    
+    TweenService:Create(
+        teleportToggleBtn,
+        TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+        {
+            Position = UDim2.new(1, -60, 0.5, -25),
+            BackgroundColor3 = colors.teleportAccent
+        }
+    ):Play()
+    
+    teleportToggleBtn.Text = "TP"
+    
+    wait(0.3)
+    teleportContainer.Visible = false
+end)
+
+-- Main GUI close button functionality
+closeBtn.MouseButton1Click:Connect(function()
+    uiVisible = false
+    mainContainer.Visible = false
+    toggleUIBtn.Text = "Show UI"
+end)
+
+----------------------------------------------------------------
+-- SPECIAL ZOMBIE IDENTIFICATION FUNCTIONS
+----------------------------------------------------------------
+local function isSniperZombie(zombie)
+    return zombie.Name == "SniperZombie"
+end
+
+local function isHunterZombie(zombie)
+    return zombie.Name == "Hunter"
+end
+
+local function isBossZombie(zombie)
+    return zombie.Name == "Boss"
+end
+
+local function isDestroyerZombie(zombie)
+    return zombie.Name == "Destroyer"
+end
+
+local function isSpecialZombie(zombie)
+    return isSniperZombie(zombie) or isHunterZombie(zombie) or isBossZombie(zombie) or isDestroyerZombie(zombie)
+end
+
+----------------------------------------------------------------
+-- IMPROVED ZOMBIE HEALTH CHECK SYSTEM
+----------------------------------------------------------------
+local function getZombieHealth(zombie)
+    local humanoid = zombie:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        return humanoid.Health, humanoid.MaxHealth
+    end
+    return 0, 100 -- Default if no humanoid found
+end
+
+local function isZombieAlive(zombie)
+    if not zombie or not zombie.Parent then return false end
+    local health, maxHealth = getZombieHealth(zombie)
+    return health > 0
+end
+
+----------------------------------------------------------------
+-- SIMPLIFIED BOSS IGNORE SYSTEM (REMOVED OLD HP SYSTEM)
+----------------------------------------------------------------
+local function shouldIgnoreBoss(boss)
+    if not isBossZombie(boss) then return false end
+    
+    -- NEW: Only check manual boss ignore toggle
+    if bossIgnoreEnabled then
+        return true
+    end
+    
+    return false
+end
+
+----------------------------------------------------------------
+-- ENHANCED TELEPORT FUNCTIONS WITH CUSTOM DISTANCE
+----------------------------------------------------------------
+-- NEW: Function to get prioritized teleport target (SniperZombie > Boss > Destroyer > Hunter > closest)
+local function getPrioritizedTeleportTarget()
+    if not teleportBasePosition then
+        return nil
+    end
+    
+    local sniperZombie = nil
+    local bossZombie = nil
+    local destroyerZombie = nil
+    local hunterZombie = nil
+    local closestZombie = nil
+    local closestDistance = math.huge
+
+    -- First pass: Look for priority zombies
+    for _, zombie in ipairs(zombiesFolder:GetChildren()) do
+        if zombie:IsA("Model") and zombie:FindFirstChild("HumanoidRootPart") then
+            -- Skip dead zombies
+            if not isZombieAlive(zombie) then
+                continue
+            end
+            
+            -- Skip boss if should be ignored (manual toggle only)
+            if isBossZombie(zombie) and shouldIgnoreBoss(zombie) then
+                continue
+            end
+            
+            local rootPart = zombie.HumanoidRootPart
+            
+            -- Check for SniperZombie (highest priority)
+            if isSniperZombie(zombie) then
+                sniperZombie = zombie
+                break -- SniperZombie has highest priority, we can stop searching
+            end
+            
+            -- Check for Boss (2nd priority)
+            if isBossZombie(zombie) and not bossZombie then
+                bossZombie = zombie
+            end
+            
+            -- Check for Destroyer (3rd priority)
+            if isDestroyerZombie(zombie) and not destroyerZombie then
+                destroyerZombie = zombie
+            end
+            
+            -- Check for Hunter (4th priority)
+            if isHunterZombie(zombie) and not hunterZombie then
+                hunterZombie = zombie
+            end
+            
+            -- Also track the closest zombie for fallback
+            local distance = (teleportBasePosition - rootPart.Position).Magnitude
+            if distance < closestDistance then
+                closestDistance = distance
+                closestZombie = zombie
+            end
+        end
+    end
+
+    -- Return in priority order: SniperZombie > Boss > Destroyer > Hunter > Closest Zombie
+    if sniperZombie then
+        return sniperZombie
+    elseif bossZombie then
+        return bossZombie
+    elseif destroyerZombie then
+        return destroyerZombie
+    elseif hunterZombie then
+        return hunterZombie
+    else
+        return closestZombie
+    end
+end
+
+-- IMPROVED: Function to get teleport target with better boss handling
+local function getTeleportTarget()
+    -- Only use teleport if we have a base position
+    if not teleportBasePosition then
+        return nil
+    end
+    
+    -- Check if current teleport target is invalid, dead, OR should be ignored
+    if not teleportTarget or not teleportTarget.Parent or not teleportTarget:FindFirstChild("HumanoidRootPart") or not isZombieAlive(teleportTarget) or (isBossZombie(teleportTarget) and shouldIgnoreBoss(teleportTarget)) then
+        teleportTarget = getPrioritizedTeleportTarget()
+        if teleportTarget then
+            local zombieName = teleportTarget.Name
+            if isSniperZombie(teleportTarget) then
+                print("Priority teleport target: " .. zombieName .. " (SniperZombie - highest priority)")
+            elseif isBossZombie(teleportTarget) then
+                print("Priority teleport target: " .. zombieName .. " (Boss - 2nd priority)")
+            elseif isDestroyerZombie(teleportTarget) then
+                print("Priority teleport target: " .. zombieName .. " (Destroyer - 3rd priority)")
+            elseif isHunterZombie(teleportTarget) then
+                print("Priority teleport target: " .. zombieName .. " (Hunter - 4th priority)")
+            else
+                print("Teleport target: " .. zombieName .. " (closest zombie)")
+            end
+        else
+            print("No valid teleport targets found near base position")
+        end
+    end
+    
+    return teleportTarget
+end
+
+-- ENHANCED: CHARACTER TELEPORTATION WITH CUSTOM DISTANCE SETTINGS
+local function teleportToZombie(zombie)
+    if not zombie or not zombie.Parent or not zombie:FindFirstChild("HumanoidRootPart") or not isZombieAlive(zombie) then
+        return false
+    end
+    
+    -- Don't teleport to boss if should be ignored
+    if isBossZombie(zombie) and shouldIgnoreBoss(zombie) then
+        return false
+    end
+    
+    local rootPart = zombie.HumanoidRootPart
+    
+    -- Get player character
+    local character = player.Character
+    if not character then
+        return false
+    end
+    
+    local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+    if not humanoidRootPart then
+        return false
+    end
+    
+    -- Get zombie position and facing direction
+    local zombiePosition = rootPart.Position
+    local zombieCFrame = rootPart.CFrame
+    local zombieLookVector = zombieCFrame.LookVector
+    local zombieRightVector = zombieCFrame.RightVector
+    
+    -- Calculate teleport position with all custom settings
+    -- Base position in front of zombie with custom distance
+    local frontOffset = zombieLookVector * teleportDistance
+    
+    -- Add horizontal offset (left/right)
+    local horizontalOffset = zombieRightVector * teleportHorizontalOffset
+    
+    -- Add vertical offset (up/down)
+    local verticalOffset = Vector3.new(0, teleportVerticalOffset, 0)
+    
+    -- Create looping pattern around zombie
+    local loopAngle = math.sin(tick() * 2) * teleportLoopDistance
+    local loopOffset = zombieRightVector * loopAngle
+    
+    -- Final teleport position
+    local teleportPosition = zombiePosition + frontOffset + horizontalOffset + verticalOffset + loopOffset
+    
+    -- TELEPORT CHARACTER - Face away from zombie
+    humanoidRootPart.CFrame = CFrame.new(teleportPosition, teleportPosition + frontOffset)
+    
+    -- NEW: Set this as the last teleported target for aimbot
+    lastTeleportedTarget = zombie
+    lastTeleportTimestamp = os.clock()
+    
+    print(string.format("Teleported to %s | Distance: %d | Height: %d | Offset: %d | Loop: %d", 
+        zombie.Name, teleportDistance, teleportVerticalOffset, teleportHorizontalOffset, teleportLoopDistance))
+    
+    -- NEW: Immediately aim at the zombie after teleport
+    if immediateAimAfterTeleport then
+        local targetPart = zombie[aimPartName]
+        if targetPart then
+            local targetPosition = targetPart.Position
+            
+            -- Aim slightly higher for sniper zombies
+            if isSniperZombie(zombie) then
+                targetPosition = targetPosition + Vector3.new(0, 0.5, 0)
+            end
+            
+            -- Use immediate aim (no smoothing) for instant targeting
+            camera.CFrame = CFrame.new(camera.CFrame.Position, targetPosition)
+            lastCameraCFrame = camera.CFrame
+        end
+    end
+    
+    return true
+end
+
+----------------------------------------------------------------
+-- ESP Functions (UPDATED - COLOR FOR ALL, NAMES ONLY FOR SPECIAL)
+----------------------------------------------------------------
+local function clearESP()
+    for _, v in pairs(espObjects) do
+        if v and v.Parent then
+            v:Destroy()
+        end
+    end
+    table.clear(espObjects)
+end
+
+local function getZombieESPColor(zombie)
+    if isSniperZombie(zombie) then
+        return espColors.SniperZombie
+    elseif isHunterZombie(zombie) then
+        return espColors.Hunter
+    elseif isBossZombie(zombie) then
+        return espColors.Boss
+    elseif isDestroyerZombie(zombie) then
+        return espColors.Destroyer
+    else
+        return espColors.normal -- Red for normal zombies
+    end
+end
+
+local function createESP(obj)
+    if obj:IsA("Model") and not obj:FindFirstChild("ESP_Highlight") then
+        local zombieColor = getZombieESPColor(obj)
+        
+        -- Create highlight for ALL zombies
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "ESP_Highlight"
+        highlight.Adornee = obj
+        highlight.FillColor = zombieColor
+        highlight.OutlineColor = zombieColor
+        highlight.FillTransparency = 0.3
+        highlight.OutlineTransparency = 0
+        highlight.Parent = obj
+        table.insert(espObjects, highlight)
+
+        -- Only create name tag for SPECIAL zombies
+        if isSpecialZombie(obj) then
+            local billboard = Instance.new("BillboardGui")
+            billboard.Name = "ESP_Billboard"
+            billboard.Adornee = obj:FindFirstChild("Head") or obj:FindFirstChild("HumanoidRootPart") or obj
+            billboard.Size = UDim2.new(0, 200, 0, 50)
+            billboard.StudsOffset = Vector3.new(0, 3, 0)
+            billboard.AlwaysOnTop = true
+            billboard.Parent = obj
+
+            local label = Instance.new("TextLabel")
+            label.Size = UDim2.new(1, 0, 1, 0)
+            label.BackgroundTransparency = 1 -- Completely transparent background
+            label.TextColor3 = zombieColor
+            label.Text = obj.Name
+            label.TextSize = 14
+            label.Font = Enum.Font.GothamBold
+            label.Parent = billboard
+
+            table.insert(espObjects, billboard)
+        end
+    end
+end
+
+local function updateESP()
+    clearESP()
+    if espVisible then
+        for _, z in ipairs(zombiesFolder:GetChildren()) do
+            createESP(z)
+        end
+    end
+end
+
+-- ESP Toggle Handler
+espToggle.MouseButton1Click:Connect(function()
+    espVisible = not espVisible
+    updateESP()
+end)
+
+zombiesFolder.ChildAdded:Connect(function(child)
+    if espVisible then
+        task.wait(0.1)
+        createESP(child)
+    end
+end)
+
+zombiesFolder.ChildRemoved:Connect(function(child)
+    if espVisible then
+        updateESP()
+    end
+end)
+
+----------------------------------------------------------------
+-- SMOOTH AIMING FUNCTIONS
+----------------------------------------------------------------
+local function smoothAim(targetPosition)
+    if not smoothAimEnabled then
+        camera.CFrame = CFrame.new(camera.CFrame.Position, targetPosition)
+        lastCameraCFrame = camera.CFrame
+        return
+    end
+    
+    local currentPosition = camera.CFrame.Position
+    local targetLookVector = (targetPosition - currentPosition).Unit
+    local targetCFrame = CFrame.new(currentPosition, currentPosition + targetLookVector)
+    
+    -- Apply smoothness
+    local smoothFactor = 1 / smoothnessAmount
+    local newCFrame = lastCameraCFrame:Lerp(targetCFrame, smoothFactor)
+    
+    camera.CFrame = newCFrame
+    lastCameraCFrame = newCFrame
+end
+
+----------------------------------------------------------------
+-- AIMBOT + WALL CHECK FUNCTIONS (UPDATED)
+----------------------------------------------------------------
+local function isVisible(targetPart)
+    local origin = camera.CFrame.Position
+    local direction = (targetPart.Position - origin).Unit * 500
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+    raycastParams.FilterDescendantsInstances = {player.Character, camera}
+    raycastParams.IgnoreWater = true
+
+    local result = workspace:Raycast(origin, direction, raycastParams)
+    return result and result.Instance and targetPart:IsDescendantOf(result.Instance.Parent)
+end
+
+-- NEW: Function to get aimbot target with teleport priority
+local function getAimbotTarget()
+    -- NEW: If we have a recently teleported target and it's still valid, prioritize it
+    if lastTeleportedTarget and os.clock() - lastTeleportTimestamp < TARGET_LOCK_DURATION then
+        if lastTeleportedTarget.Parent and lastTeleportedTarget:FindFirstChild(aimPartName) and isZombieAlive(lastTeleportedTarget) then
+            local part = lastTeleportedTarget[aimPartName]
+            local screenPos, onScreen = camera:WorldToScreenPoint(part.Position)
+            local visible = true
+            if wallCheckEnabled then
+                visible = isVisible(part)
+            end
+            if onScreen and visible then
+                return lastTeleportedTarget
+            end
+        else
+            -- Last teleported target is no longer valid, clear it
+            lastTeleportedTarget = nil
+        end
+    end
+    
+    -- Fall back to normal FOV-based targeting
+    local screenCenter = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
+    local closestDist = aimFOV
+    local closestZombie = nil
+
+    for _, zombie in ipairs(zombiesFolder:GetChildren()) do
+        if zombie:IsA("Model") and zombie:FindFirstChild(aimPartName) then
+            -- Skip dead zombies
+            if not isZombieAlive(zombie) then
+                continue
+            end
+            
+            -- Skip boss if should be ignored
+            if isBossZombie(zombie) and shouldIgnoreBoss(zombie) then
+                continue
+            end
+            
+            local part = zombie[aimPartName]
+            local screenPos, onScreen = camera:WorldToScreenPoint(part.Position)
+            if onScreen then
+                local dist = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
+                local visible = true
+                if wallCheckEnabled then
+                    visible = isVisible(part)
+                end
+                if dist < closestDist and visible then
+                    closestDist = dist
+                    closestZombie = zombie
+                end
+            end
+        end
+    end
+    
+    return closestZombie
+end
+
+----------------------------------------------------------------
+-- HITBOX EXPANDER FUNCTIONS (UPDATED FOR TORSO WITH SAME SIZE AS HEAD)
+----------------------------------------------------------------
+local function expandHitbox(zombie)
+    if zombie:IsA("Model") then
+        local targetPart = nil
+        local partName = ""
+        
+        -- Determine which part to expand based on Print Cash mode
+        if printCashEnabled then
+            targetPart = zombie:FindFirstChild("Torso") or zombie:FindFirstChild("HumanoidRootPart")
+            partName = "Torso"
+        else
+            targetPart = zombie:FindFirstChild("Head")
+            partName = "Head"
+        end
+        
+        if targetPart and targetPart:IsA("BasePart") then
+            if not targetPart:FindFirstChild("OriginalSize") then
+                local originalSize = Instance.new("Vector3Value")
+                originalSize.Name = "OriginalSize"
+                originalSize.Value = targetPart.Size
+                originalSize.Parent = targetPart
+            end
+            
+            -- Make hitbox the same size for both head and torso
+            -- Use the same method as head hitbox but for torso with same size
+            if isSniperZombie(zombie) then
+                targetPart.Size = Vector3.new(4, 4, 4) -- 4x4x4 hitbox for sniper zombies
+            else
+                targetPart.Size = Vector3.new(5, 5, 5) -- 5x5x5 hitbox for other zombies
+            end
+            
+            targetPart.Transparency = 0.5
+            targetPart.CanCollide = false
+            targetPart.Material = Enum.Material.ForceField
+        end
+    end
+end
+
+local function resetHitbox(zombie)
+    if zombie:IsA("Model") then
+        -- Check both possible parts that might have been expanded
+        local partsToCheck = {"Head", "Torso", "HumanoidRootPart"}
+        
+        for _, partName in ipairs(partsToCheck) do
+            local part = zombie:FindFirstChild(partName)
+            if part and part:IsA("BasePart") and part:FindFirstChild("OriginalSize") then
+                part.Size = part.OriginalSize.Value
+                part.Transparency = 0
+                part.CanCollide = true
+                part.Material = Enum.Material.Plastic
+                part.OriginalSize:Destroy()
+            elseif part and part:IsA("BasePart") then
+                -- Fallback to default sizes - same method for both head and torso
+                if partName == "Head" then
+                    part.Size = Vector3.new(1, 1, 1)
+                elseif partName == "Torso" then
+                    part.Size = Vector3.new(2, 2, 1)
+                elseif partName == "HumanoidRootPart" then
+                    part.Size = Vector3.new(2, 2, 1)
+                end
+                part.Transparency = 0
+                part.CanCollide = true
+                part.Material = Enum.Material.Plastic
+            end
+        end
+    end
+end
+
+local function updateAllZombies()
+    for _, zombie in ipairs(zombiesFolder:GetChildren()) do
+        if hitboxEnabled then
+            expandHitbox(zombie)
+        else
+            resetHitbox(zombie)
+        end
+    end
+end
+
+-- Hitbox Toggle Handler
+hitboxToggle.MouseButton1Click:Connect(function()
+    hitboxEnabled = not hitboxEnabled
+    updateAllZombies()
+end)
+
+zombiesFolder.ChildAdded:Connect(function(zombie)
+    task.wait(0.2)
+    if hitboxEnabled then
+        expandHitbox(zombie)
+    end
+end)
+
+----------------------------------------------------------------
+-- MAIN LOOP
+----------------------------------------------------------------
+RunService.RenderStepped:Connect(function()
+    if draggingSlider then
+        local mouseX = UserInputService:GetMouseLocation().X
+        local sliderX = sliderTrack.AbsolutePosition.X
+        local sliderWidth = sliderTrack.AbsoluteSize.X
+        local relativeX = math.clamp(mouseX - sliderX, 0, sliderWidth)
+        
+        aimFOV = math.floor(20 + (relativeX/sliderWidth) * 280)
+        updateFOVSlider()
+    end
+
+    if fovCircle then
+        fovCircle.Position = camera.ViewportSize / 2
+        fovCircle.Radius = aimFOV
+        fovCircle.Visible = fovVisible
+    end
+
+    -- NEW: Auto Teleport functionality with custom distance
+    local currentTime = tick()
+    if autoTeleportEnabled and currentTime - lastTeleportTime >= teleportCooldown then
+        local targetToTeleport = getTeleportTarget()
+        if targetToTeleport then
+            -- TELEPORT TO TARGET WITH CUSTOM SETTINGS
+            if teleportToZombie(targetToTeleport) then
+                lastTeleportTime = currentTime
+            else
+                -- If teleport failed (e.g., boss is ignored), clear target to find new one
+                teleportTarget = nil
+            end
+        end
+    end
+
+    if aimLockActive then
+        -- NEW: Use the updated aimbot target function that prioritizes teleported targets
+        local targetZombie = getAimbotTarget()
+        if targetZombie then
+            local targetPart = targetZombie[aimPartName]
+            local targetPosition = targetPart.Position
+            
+            -- Aim slightly higher for sniper zombies
+            if isSniperZombie(targetZombie) then
+                targetPosition = targetPosition + Vector3.new(0, 0.5, 0) -- Aim higher for sniper zombies
+            end
+            
+            smoothAim(targetPosition)
+        end
+    end
+end)
+
+-- Keybind for PC users
+if isPC then
+    UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if not gameProcessed and input.KeyCode == aimbindKey then
+            aimLockActive = not aimLockActive
+            aimlockToggle.Text = aimLockActive and "ON" or "OFF"
+            aimlockToggle.BackgroundColor3 = aimLockActive and colors.toggleOn or colors.toggleOff
+        end
+    end)
+end
+
+-- Initialize hitboxes
+updateAllZombies()
+
+-- Start the animation sequence
+task.spawn(function()
+    wait(0.5) -- Initial delay
+    
+    print("Starting Video Intro Animation (4 seconds)...")
+    
+    -- Play the video animation
+    local videoAnimation = playVideoIntro()
+    local videoSuccess = videoAnimation()
+    
+    if videoSuccess then
+        print("Video completed, starting Jack4Life Animation...")
+        
+        -- Immediately start the Jack4Life animation
+        showJack4LifeAnimation()
+    else
+        -- If video fails, just show the text animation
+        print("Video animation failed, showing Jack4Life Animation directly...")
+        showJack4LifeAnimation()
+    end
+end)
+
+print("Script loaded successfully! Made By Jack4Life")
+print("Video intro animation playing for 4 seconds - then text animation - then GUI will appear")
+print("Click the TP button on the right side for teleport controls")
