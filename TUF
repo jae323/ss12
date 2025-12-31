@@ -1,0 +1,1514 @@
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- Settings
+_G.PlayerHeadSize = 1  -- Changed to 1
+_G.NPCHeadSize = 20
+_G.Disabled = false
+_G.TeamCheck = true
+_G.NPCEnabled = true
+_G.ESPEnabled = true
+
+-- Aimbot Settings
+_G.AimbotEnabled = false
+_G.AimbotFOV = 100
+_G.AimbotSmoothness = 0.6
+_G.WallCheck = true
+_G.AimbotTeamCheck = true
+_G.AimbotHeightOffset = 2.0
+_G.AimbotTargetPart = "Head"
+
+-- ESP Settings
+_G.ESPColor = Color3.fromRGB(255, 50, 50)
+_G.ESPTransparency = 0.3
+_G.ShowName = true
+_G.ShowDistance = true
+_G.ShowHealth = true
+_G.MaxDistance = 1000
+
+-- Melee Aura Settings
+_G.MeleeAuraEnabled = false
+_G.MeleeAuraRange = 25
+_G.MeleeAuraTeamCheck = true
+_G.MeleeAuraNPCEnabled = true
+_G.MeleeAuraDelay = 0.05
+_G.MeleeAuraMultiTarget = true
+_G.MeleeAuraAutoEquip = true
+_G.MeleeAuraHitDirection = "Down"
+_G.MeleeAuraHitsPerAttack = 8
+_G.MeleeAuraAttackRadius = 5
+_G.MeleeAuraMaxTargets = 10
+
+-- Storage for ESP boxes and NPC tracking
+local ESPBoxes = {}
+local PlayerESPBoxes = {}
+local TrackedNPCs = {}
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- Aimbot Variables
+local AimbotTarget = nil
+local AimbotLocked = false
+local FOVCircle = nil
+local NPCsCache = {}
+local LastCacheUpdate = 0
+
+-- Melee Aura Variables
+local MeleeAuraActive = false
+local LastAttackTime = 0
+local MeleeAuraVisualizer = nil
+local EquippedTool = nil
+local ToolConnections = {}
+
+-- GUI State
+local GUIVisible = false
+
+-- Create Modern GUI with smaller size
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "HitboxConfigGUI"
+ScreenGui.Parent = CoreGui
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+-- Compact Toggle Button
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Name = "ToggleButton"
+ToggleButton.Size = UDim2.new(0, 35, 0, 35)
+ToggleButton.Position = UDim2.new(1, -40, 0, 10)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+ToggleButton.BackgroundTransparency = 0.1
+ToggleButton.BorderSizePixel = 0
+ToggleButton.Text = "⚙"
+ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleButton.Font = Enum.Font.GothamBold
+ToggleButton.TextSize = 16
+ToggleButton.ZIndex = 100
+ToggleButton.Visible = true
+ToggleButton.Parent = ScreenGui
+
+local ButtonCorner = Instance.new("UICorner")
+ButtonCorner.CornerRadius = UDim.new(0, 6)
+ButtonCorner.Parent = ToggleButton
+
+local ButtonStroke = Instance.new("UIStroke")
+ButtonStroke.Color = Color3.fromRGB(80, 80, 90)
+ButtonStroke.Thickness = 2
+ButtonStroke.Parent = ToggleButton
+
+-- Smaller Main Frame
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 280, 0, 480)  -- Smaller size
+MainFrame.Position = UDim2.new(0.5, -140, 0.5, -240)  -- Center position
+MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+MainFrame.BackgroundTransparency = 0.05
+MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = true
+MainFrame.Visible = false
+MainFrame.Active = true
+MainFrame.Selectable = true
+MainFrame.Parent = ScreenGui
+
+local FrameCorner = Instance.new("UICorner")
+FrameCorner.CornerRadius = UDim.new(0, 8)
+FrameCorner.Parent = MainFrame
+
+local FrameStroke = Instance.new("UIStroke")
+FrameStroke.Color = Color3.fromRGB(60, 60, 70)
+FrameStroke.Thickness = 2
+FrameStroke.Parent = MainFrame
+
+-- Make entire title bar draggable
+local DraggableFrame = Instance.new("Frame")
+DraggableFrame.Name = "DraggableFrame"
+DraggableFrame.Size = UDim2.new(1, 0, 0, 30)
+DraggableFrame.BackgroundTransparency = 1
+DraggableFrame.Active = true
+DraggableFrame.Selectable = true
+DraggableFrame.Parent = MainFrame
+
+-- Title Bar
+local TitleBar = Instance.new("Frame")
+TitleBar.Name = "TitleBar"
+TitleBar.Size = UDim2.new(1, 0, 0, 30)
+TitleBar.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+TitleBar.BorderSizePixel = 0
+TitleBar.Active = true
+TitleBar.Selectable = true
+TitleBar.Parent = DraggableFrame
+
+local TitleBarCorner = Instance.new("UICorner")
+TitleBarCorner.CornerRadius = UDim.new(0, 8)
+TitleBarCorner.Parent = TitleBar
+
+local Title = Instance.new("TextLabel")
+Title.Name = "Title"
+Title.Size = UDim2.new(1, -40, 1, 0)
+Title.Position = UDim2.new(0, 10, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "HITBOX & AIMBOT CONFIG"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 13
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = TitleBar
+
+local CloseButton = Instance.new("TextButton")
+CloseButton.Name = "CloseButton"
+CloseButton.Size = UDim2.new(0, 25, 0, 25)
+CloseButton.Position = UDim2.new(1, -30, 0.5, -12.5)
+CloseButton.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+CloseButton.BackgroundTransparency = 0.5
+CloseButton.Text = "✕"
+CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseButton.Font = Enum.Font.GothamBold
+CloseButton.TextSize = 14
+CloseButton.Parent = TitleBar
+
+local CloseButtonCorner = Instance.new("UICorner")
+CloseButtonCorner.CornerRadius = UDim.new(0, 6)
+CloseButtonCorner.Parent = CloseButton
+
+-- Content Frame
+local ContentFrame = Instance.new("Frame")
+ContentFrame.Name = "ContentFrame"
+ContentFrame.Size = UDim2.new(1, -10, 1, -35)
+ContentFrame.Position = UDim2.new(0, 5, 0, 35)
+ContentFrame.BackgroundTransparency = 1
+ContentFrame.Active = true
+ContentFrame.Selectable = true
+ContentFrame.Parent = MainFrame
+
+-- Create scroll frame
+local ScrollFrame = Instance.new("ScrollingFrame")
+ScrollFrame.Name = "ScrollFrame"
+ScrollFrame.Size = UDim2.new(1, 0, 1, 0)
+ScrollFrame.BackgroundTransparency = 1
+ScrollFrame.ScrollBarThickness = 3
+ScrollFrame.ScrollBarImageColor3 = Color3.fromRGB(60, 60, 70)
+ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 1100)
+ScrollFrame.Active = true
+ScrollFrame.Selectable = true
+ScrollFrame.Parent = ContentFrame
+
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.Padding = UDim.new(0, 8)
+UIListLayout.Parent = ScrollFrame
+
+-- Compact number input function
+local function createNumberInput(label, min, max, default, callback)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, 0, 0, 45)  -- Reduced height
+    container.BackgroundTransparency = 1
+    
+    local labelText = Instance.new("TextLabel")
+    labelText.Size = UDim2.new(0.6, 0, 1, 0)
+    labelText.BackgroundTransparency = 1
+    labelText.Text = label
+    labelText.TextColor3 = Color3.fromRGB(200, 200, 200)
+    labelText.Font = Enum.Font.GothamMedium
+    labelText.TextSize = 12
+    labelText.TextXAlignment = Enum.TextXAlignment.Left
+    labelText.Parent = container
+    
+    local inputFrame = Instance.new("Frame")
+    inputFrame.Size = UDim2.new(0.4, 0, 0.7, 0)
+    inputFrame.Position = UDim2.new(0.6, 0, 0.15, 0)
+    inputFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+    inputFrame.BorderSizePixel = 0
+    inputFrame.Parent = container
+    
+    local inputCorner = Instance.new("UICorner")
+    inputCorner.CornerRadius = UDim.new(0, 4)
+    inputCorner.Parent = inputFrame
+    
+    local textBox = Instance.new("TextBox")
+    textBox.Name = "ValueInput"
+    textBox.Size = UDim2.new(1, 0, 1, 0)
+    textBox.BackgroundTransparency = 1
+    textBox.Text = tostring(default)
+    textBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+    textBox.Font = Enum.Font.Gotham
+    textBox.TextSize = 12
+    textBox.TextXAlignment = Enum.TextXAlignment.Center
+    textBox.ClearTextOnFocus = false
+    textBox.Parent = inputFrame
+    
+    -- Update function
+    local function updateValue(newValue)
+        local num = tonumber(newValue)
+        if num then
+            num = math.clamp(num, min, max)
+            textBox.Text = tostring(num)
+            callback(num)
+        else
+            textBox.Text = tostring(default)
+        end
+    end
+    
+    textBox.FocusLost:Connect(function()
+        updateValue(textBox.Text)
+    end)
+    
+    -- Mouse wheel support for quick adjustment
+    inputFrame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseWheel then
+            local current = tonumber(textBox.Text) or default
+            if input.Position.Z > 0 then
+                updateValue(current + 1)
+            else
+                updateValue(current - 1)
+            end
+        end
+    end)
+    
+    return container, textBox
+end
+
+-- Compact toggle function
+local function createToggleButton(label, default, callback)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, 0, 0, 25)  -- Reduced height
+    container.BackgroundTransparency = 1
+    
+    local labelText = Instance.new("TextLabel")
+    labelText.Size = UDim2.new(0.6, 0, 1, 0)
+    labelText.BackgroundTransparency = 1
+    labelText.Text = label
+    labelText.TextColor3 = Color3.fromRGB(220, 220, 220)
+    labelText.Font = Enum.Font.GothamMedium
+    labelText.TextSize = 12
+    labelText.TextXAlignment = Enum.TextXAlignment.Left
+    labelText.Parent = container
+    
+    local toggleButton = Instance.new("TextButton")
+    toggleButton.Size = UDim2.new(0.4, 0, 0.8, 0)
+    toggleButton.Position = UDim2.new(0.6, 0, 0.1, 0)
+    toggleButton.BackgroundColor3 = default and Color3.fromRGB(0, 120, 215) or Color3.fromRGB(200, 50, 50)
+    toggleButton.Text = default and "ON" or "OFF"
+    toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggleButton.Font = Enum.Font.GothamBold
+    toggleButton.TextSize = 12
+    toggleButton.Parent = container
+    
+    local toggleCorner = Instance.new("UICorner")
+    toggleCorner.CornerRadius = UDim.new(0, 4)
+    toggleCorner.Parent = toggleButton
+    
+    local toggleStroke = Instance.new("UIStroke")
+    toggleStroke.Color = Color3.fromRGB(60, 60, 70)
+    toggleStroke.Thickness = 1
+    toggleStroke.Parent = toggleButton
+    
+    local state = default
+    
+    local function updateButton()
+        if state then
+            toggleButton.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+            toggleButton.Text = "ON"
+        else
+            toggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+            toggleButton.Text = "OFF"
+        end
+    end
+    
+    updateButton()
+    
+    toggleButton.MouseButton1Click:Connect(function()
+        state = not state
+        updateButton()
+        callback(state)
+    end)
+    
+    return container, function(newState)
+        state = newState
+        updateButton()
+    end
+end
+
+-- Compact dropdown function
+local function createDropdown(label, options, default, callback)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, 0, 0, 35)
+    container.BackgroundTransparency = 1
+    
+    local labelText = Instance.new("TextLabel")
+    labelText.Size = UDim2.new(1, 0, 0, 15)
+    labelText.BackgroundTransparency = 1
+    labelText.Text = label
+    labelText.TextColor3 = Color3.fromRGB(200, 200, 200)
+    labelText.Font = Enum.Font.GothamMedium
+    labelText.TextSize = 12
+    labelText.TextXAlignment = Enum.TextXAlignment.Left
+    labelText.Parent = container
+    
+    local dropdownButton = Instance.new("TextButton")
+    dropdownButton.Size = UDim2.new(1, 0, 0, 20)
+    dropdownButton.Position = UDim2.new(0, 0, 0, 15)
+    dropdownButton.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+    dropdownButton.Text = default
+    dropdownButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    dropdownButton.Font = Enum.Font.Gotham
+    dropdownButton.TextSize = 11
+    dropdownButton.Parent = container
+    
+    local dropdownCorner = Instance.new("UICorner")
+    dropdownCorner.CornerRadius = UDim.new(0, 4)
+    dropdownCorner.Parent = dropdownButton
+    
+    return container, dropdownButton
+end
+
+-- Player Settings Section
+local playerSection = Instance.new("Frame")
+playerSection.Size = UDim2.new(1, 0, 0, 50)
+playerSection.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+playerSection.BorderSizePixel = 0
+playerSection.Active = true
+playerSection.Selectable = true
+playerSection.Parent = ScrollFrame
+
+local playerSectionCorner = Instance.new("UICorner")
+playerSectionCorner.CornerRadius = UDim.new(0, 6)
+playerSectionCorner.Parent = playerSection
+
+local playerSectionHeader = Instance.new("TextLabel")
+playerSectionHeader.Size = UDim2.new(1, -10, 0, 20)
+playerSectionHeader.Position = UDim2.new(0, 5, 0, 3)
+playerSectionHeader.BackgroundTransparency = 1
+playerSectionHeader.Text = "PLAYER HITBOX"
+playerSectionHeader.TextColor3 = Color3.fromRGB(0, 150, 255)
+playerSectionHeader.Font = Enum.Font.GothamBold
+playerSectionHeader.TextSize = 12
+playerSectionHeader.TextXAlignment = Enum.TextXAlignment.Left
+playerSectionHeader.Parent = playerSection
+
+-- Player Hitbox Size Input
+local playerInput, playerTextBox = createNumberInput("Head Size (1-50)", 1, 50, _G.PlayerHeadSize, function(value)
+    _G.PlayerHeadSize = value
+end)
+playerInput.Position = UDim2.new(0, 5, 0, 23)
+playerInput.Parent = playerSection
+
+-- NPC Settings Section
+local npcSection = Instance.new("Frame")
+npcSection.Size = UDim2.new(1, 0, 0, 50)
+npcSection.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+npcSection.BorderSizePixel = 0
+npcSection.Active = true
+npcSection.Selectable = true
+npcSection.Parent = ScrollFrame
+
+local npcSectionCorner = Instance.new("UICorner")
+npcSectionCorner.CornerRadius = UDim.new(0, 6)
+npcSectionCorner.Parent = npcSection
+
+local npcSectionHeader = Instance.new("TextLabel")
+npcSectionHeader.Size = UDim2.new(1, -10, 0, 20)
+npcSectionHeader.Position = UDim2.new(0, 5, 0, 3)
+npcSectionHeader.BackgroundTransparency = 1
+npcSectionHeader.Text = "NPC HITBOX"
+npcSectionHeader.TextColor3 = Color3.fromRGB(255, 150, 0)
+npcSectionHeader.Font = Enum.Font.GothamBold
+npcSectionHeader.TextSize = 12
+npcSectionHeader.TextXAlignment = Enum.TextXAlignment.Left
+npcSectionHeader.Parent = npcSection
+
+-- NPC Hitbox Size Input
+local npcInput, npcTextBox = createNumberInput("Head Size (1-50)", 1, 50, _G.NPCHeadSize, function(value)
+    _G.NPCHeadSize = value
+end)
+npcInput.Position = UDim2.new(0, 5, 0, 23)
+npcInput.Parent = npcSection
+
+-- Aimbot Settings Section
+local aimbotSection = Instance.new("Frame")
+aimbotSection.Size = UDim2.new(1, 0, 0, 200)
+aimbotSection.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+aimbotSection.BorderSizePixel = 0
+aimbotSection.Active = true
+aimbotSection.Selectable = true
+aimbotSection.Parent = ScrollFrame
+
+local aimbotSectionCorner = Instance.new("UICorner")
+aimbotSectionCorner.CornerRadius = UDim.new(0, 6)
+aimbotSectionCorner.Parent = aimbotSection
+
+local aimbotSectionHeader = Instance.new("TextLabel")
+aimbotSectionHeader.Size = UDim2.new(1, -10, 0, 20)
+aimbotSectionHeader.Position = UDim2.new(0, 5, 0, 3)
+aimbotSectionHeader.BackgroundTransparency = 1
+aimbotSectionHeader.Text = "AIMBOT SETTINGS"
+aimbotSectionHeader.TextColor3 = Color3.fromRGB(255, 100, 100)
+aimbotSectionHeader.Font = Enum.Font.GothamBold
+aimbotSectionHeader.TextSize = 12
+aimbotSectionHeader.TextXAlignment = Enum.TextXAlignment.Left
+aimbotSectionHeader.Parent = aimbotSection
+
+-- Create Aimbot Settings Container
+local aimbotContainer = Instance.new("Frame")
+aimbotContainer.Size = UDim2.new(1, -10, 0, 170)
+aimbotContainer.Position = UDim2.new(0, 5, 0, 23)
+aimbotContainer.BackgroundTransparency = 1
+aimbotContainer.Active = true
+aimbotContainer.Selectable = true
+aimbotContainer.Parent = aimbotSection
+
+local aimbotLayout = Instance.new("UIListLayout")
+aimbotLayout.Padding = UDim.new(0, 3)
+aimbotLayout.Parent = aimbotContainer
+
+-- Store toggle update functions
+local toggleUpdateFunctions = {}
+
+-- Create Aimbot Toggles and Inputs
+local aimbotToggle, updateAimbotToggle = createToggleButton("Aimbot", _G.AimbotEnabled, function(value)
+    _G.AimbotEnabled = value
+    if value and not FOVCircle then
+        createFOVCircle()
+    elseif not value and FOVCircle then
+        FOVCircle:Remove()
+        FOVCircle = nil
+    end
+end)
+aimbotToggle.Parent = aimbotContainer
+toggleUpdateFunctions["Aimbot"] = updateAimbotToggle
+
+local wallCheckToggle, updateWallCheckToggle = createToggleButton("Wall Check", _G.WallCheck, function(value)
+    _G.WallCheck = value
+end)
+wallCheckToggle.Parent = aimbotContainer
+toggleUpdateFunctions["Wall Check"] = updateWallCheckToggle
+
+local aimbotTeamToggle, updateAimbotTeamToggle = createToggleButton("Team Check", _G.AimbotTeamCheck, function(value)
+    _G.AimbotTeamCheck = value
+end)
+aimbotTeamToggle.Parent = aimbotContainer
+toggleUpdateFunctions["Aimbot Team Check"] = updateAimbotTeamToggle
+
+-- Aimbot FOV Input
+local fovInput, fovTextBox = createNumberInput("FOV (1-360)", 1, 360, _G.AimbotFOV, function(value)
+    _G.AimbotFOV = value
+    if FOVCircle then
+        FOVCircle.Radius = value
+    end
+end)
+fovInput.Parent = aimbotContainer
+
+-- Smooth Aim Input
+local smoothInput, smoothTextBox = createNumberInput("Smoothness (0.1-1.0)", 0.1, 1.0, _G.AimbotSmoothness, function(value)
+    _G.AimbotSmoothness = value
+end)
+smoothInput.Parent = aimbotContainer
+
+-- Height Offset Input
+local heightInput, heightTextBox = createNumberInput("Height Offset (0-10)", 0, 10, _G.AimbotHeightOffset, function(value)
+    _G.AimbotHeightOffset = value
+end)
+heightInput.Parent = aimbotContainer
+
+-- Target Part Dropdown
+local partDropdown, partDropdownButton = createDropdown("Target Part", {"Head", "HumanoidRootPart", "UpperTorso"}, _G.AimbotTargetPart, function(value)
+    _G.AimbotTargetPart = value
+end)
+partDropdown.Parent = aimbotContainer
+
+-- Melee Aura Settings Section
+local meleeSection = Instance.new("Frame")
+meleeSection.Size = UDim2.new(1, 0, 0, 250)
+meleeSection.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+meleeSection.BorderSizePixel = 0
+meleeSection.Active = true
+meleeSection.Selectable = true
+meleeSection.Parent = ScrollFrame
+
+local meleeSectionCorner = Instance.new("UICorner")
+meleeSectionCorner.CornerRadius = UDim.new(0, 6)
+meleeSectionCorner.Parent = meleeSection
+
+local meleeSectionHeader = Instance.new("TextLabel")
+meleeSectionHeader.Size = UDim2.new(1, -10, 0, 20)
+meleeSectionHeader.Position = UDim2.new(0, 5, 0, 3)
+meleeSectionHeader.BackgroundTransparency = 1
+meleeSectionHeader.Text = "MELEE AURA"
+meleeSectionHeader.TextColor3 = Color3.fromRGB(0, 255, 150)
+meleeSectionHeader.Font = Enum.Font.GothamBold
+meleeSectionHeader.TextSize = 12
+meleeSectionHeader.TextXAlignment = Enum.TextXAlignment.Left
+meleeSectionHeader.Parent = meleeSection
+
+-- Create Melee Aura Settings Container
+local meleeContainer = Instance.new("Frame")
+meleeContainer.Size = UDim2.new(1, -10, 0, 220)
+meleeContainer.Position = UDim2.new(0, 5, 0, 23)
+meleeContainer.BackgroundTransparency = 1
+meleeContainer.Active = true
+meleeContainer.Selectable = true
+meleeContainer.Parent = meleeSection
+
+local meleeLayout = Instance.new("UIListLayout")
+meleeLayout.Padding = UDim.new(0, 3)
+meleeLayout.Parent = meleeContainer
+
+-- Melee Aura Toggles and Inputs
+local meleeToggle, updateMeleeToggle = createToggleButton("Melee Aura", _G.MeleeAuraEnabled, function(value)
+    _G.MeleeAuraEnabled = value
+    if value then
+        createMeleeAuraVisualizer()
+    elseif MeleeAuraVisualizer then
+        MeleeAuraVisualizer:Remove()
+        MeleeAuraVisualizer = nil
+    end
+end)
+meleeToggle.Parent = meleeContainer
+toggleUpdateFunctions["Melee Aura"] = updateMeleeToggle
+
+local meleeTeamToggle, updateMeleeTeamToggle = createToggleButton("Team Check", _G.MeleeAuraTeamCheck, function(value)
+    _G.MeleeAuraTeamCheck = value
+end)
+meleeTeamToggle.Parent = meleeContainer
+toggleUpdateFunctions["Melee Team Check"] = updateMeleeTeamToggle
+
+local meleeNPCToggle, updateMeleeNPCToggle = createToggleButton("Attack NPCs", _G.MeleeAuraNPCEnabled, function(value)
+    _G.MeleeAuraNPCEnabled = value
+end)
+meleeNPCToggle.Parent = meleeContainer
+toggleUpdateFunctions["Attack NPCs"] = updateMeleeNPCToggle
+
+local multiTargetToggle, updateMultiTargetToggle = createToggleButton("Multi-Target", _G.MeleeAuraMultiTarget, function(value)
+    _G.MeleeAuraMultiTarget = value
+end)
+multiTargetToggle.Parent = meleeContainer
+toggleUpdateFunctions["Multi-Target"] = updateMultiTargetToggle
+
+-- Melee Range Input
+local rangeInput, rangeTextBox = createNumberInput("Range (1-100)", 1, 100, _G.MeleeAuraRange, function(value)
+    _G.MeleeAuraRange = value
+    if MeleeAuraVisualizer then
+        MeleeAuraVisualizer.Size = Vector3.new(value * 2, value * 2, value * 2)
+    end
+end)
+rangeInput.Parent = meleeContainer
+
+-- Attack Speed Input
+local speedInput, speedTextBox = createNumberInput("Speed (ms)", 1, 1000, 50, function(value)
+    _G.MeleeAuraDelay = value / 1000
+end)
+speedInput.Parent = meleeContainer
+
+-- Hits Per Attack Input
+local hitsInput, hitsTextBox = createNumberInput("Hits/Attack", 1, 20, _G.MeleeAuraHitsPerAttack, function(value)
+    _G.MeleeAuraHitsPerAttack = value
+end)
+hitsInput.Parent = meleeContainer
+
+-- General Settings Section
+local toggleSection = Instance.new("Frame")
+toggleSection.Size = UDim2.new(1, 0, 0, 120)
+toggleSection.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+toggleSection.BorderSizePixel = 0
+toggleSection.Active = true
+toggleSection.Selectable = true
+toggleSection.Parent = ScrollFrame
+
+local toggleSectionCorner = Instance.new("UICorner")
+toggleSectionCorner.CornerRadius = UDim.new(0, 6)
+toggleSectionCorner.Parent = toggleSection
+
+local toggleSectionHeader = Instance.new("TextLabel")
+toggleSectionHeader.Size = UDim2.new(1, -10, 0, 20)
+toggleSectionHeader.Position = UDim2.new(0, 5, 0, 3)
+toggleSectionHeader.BackgroundTransparency = 1
+toggleSectionHeader.Text = "GENERAL SETTINGS"
+toggleSectionHeader.TextColor3 = Color3.fromRGB(0, 200, 100)
+toggleSectionHeader.Font = Enum.Font.GothamBold
+toggleSectionHeader.TextSize = 12
+toggleSectionHeader.TextXAlignment = Enum.TextXAlignment.Left
+toggleSectionHeader.Parent = toggleSection
+
+-- Create Toggles Container
+local togglesContainer = Instance.new("Frame")
+togglesContainer.Size = UDim2.new(1, -10, 0, 90)
+togglesContainer.Position = UDim2.new(0, 5, 0, 23)
+togglesContainer.BackgroundTransparency = 1
+togglesContainer.Active = true
+togglesContainer.Selectable = true
+togglesContainer.Parent = toggleSection
+
+local togglesLayout = Instance.new("UIListLayout")
+togglesLayout.Padding = UDim.new(0, 5)
+togglesLayout.Parent = togglesContainer
+
+-- Create Toggles
+local masterToggle, updateMasterToggle = createToggleButton("Enable Hitboxes", not _G.Disabled, function(value)
+    _G.Disabled = not value
+end)
+masterToggle.Parent = togglesContainer
+toggleUpdateFunctions["Enable Hitboxes"] = updateMasterToggle
+
+local npcToggle, updateNPCToggle = createToggleButton("NPC Detection", _G.NPCEnabled, function(value)
+    _G.NPCEnabled = value
+end)
+npcToggle.Parent = togglesContainer
+toggleUpdateFunctions["NPC Detection"] = updateNPCToggle
+
+local espToggle, updateESPToggle = createToggleButton("ESP Display", _G.ESPEnabled, function(value)
+    _G.ESPEnabled = value
+end)
+espToggle.Parent = togglesContainer
+toggleUpdateFunctions["ESP Display"] = updateESPToggle
+
+local teamToggle, updateTeamToggle = createToggleButton("Team Check", _G.TeamCheck, function(value)
+    _G.TeamCheck = value
+end)
+teamToggle.Parent = togglesContainer
+toggleUpdateFunctions["Team Check"] = updateTeamToggle
+
+-- Reset Button Section
+local resetSection = Instance.new("Frame")
+resetSection.Size = UDim2.new(1, 0, 0, 40)
+resetSection.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+resetSection.BorderSizePixel = 0
+resetSection.Active = true
+resetSection.Selectable = true
+resetSection.Parent = ScrollFrame
+
+local resetSectionCorner = Instance.new("UICorner")
+resetSectionCorner.CornerRadius = UDim.new(0, 6)
+resetSectionCorner.Parent = resetSection
+
+local resetButton = Instance.new("TextButton")
+resetButton.Size = UDim2.new(1, -10, 0, 25)
+resetButton.Position = UDim2.new(0, 5, 0, 7)
+resetButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+resetButton.Text = "RESET TO DEFAULTS"
+resetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+resetButton.Font = Enum.Font.GothamBold
+resetButton.TextSize = 12
+resetButton.Parent = resetSection
+
+local resetButtonCorner = Instance.new("UICorner")
+resetButtonCorner.CornerRadius = UDim.new(0, 4)
+resetButtonCorner.Parent = resetButton
+
+resetButton.MouseButton1Click:Connect(function()
+    _G.PlayerHeadSize = 1  -- Reset to 1
+    _G.NPCHeadSize = 20
+    _G.Disabled = false
+    _G.TeamCheck = true
+    _G.NPCEnabled = true
+    _G.ESPEnabled = true
+    
+    -- Aimbot defaults
+    _G.AimbotEnabled = false
+    _G.AimbotFOV = 100
+    _G.AimbotSmoothness = 0.6
+    _G.WallCheck = true
+    _G.AimbotTeamCheck = true
+    _G.AimbotHeightOffset = 2.0
+    _G.AimbotTargetPart = "Head"
+    
+    -- Melee Aura defaults
+    _G.MeleeAuraEnabled = false
+    _G.MeleeAuraRange = 25
+    _G.MeleeAuraTeamCheck = true
+    _G.MeleeAuraNPCEnabled = true
+    _G.MeleeAuraDelay = 0.05
+    _G.MeleeAuraMultiTarget = true
+    _G.MeleeAuraAutoEquip = true
+    _G.MeleeAuraHitDirection = "Down"
+    _G.MeleeAuraHitsPerAttack = 8
+    _G.MeleeAuraAttackRadius = 5
+    _G.MeleeAuraMaxTargets = 10
+    
+    -- Update text boxes
+    if playerTextBox then playerTextBox.Text = "1" end
+    if npcTextBox then npcTextBox.Text = "20" end
+    if fovTextBox then fovTextBox.Text = "100" end
+    if smoothTextBox then smoothTextBox.Text = "0.6" end
+    if heightTextBox then heightTextBox.Text = "2.0" end
+    if rangeTextBox then rangeTextBox.Text = "25" end
+    if speedTextBox then speedTextBox.Text = "50" end
+    if hitsTextBox then hitsTextBox.Text = "8" end
+    
+    -- Update dropdown
+    if partDropdownButton then partDropdownButton.Text = "Head" end
+    
+    -- Update toggle buttons
+    toggleUpdateFunctions["Enable Hitboxes"](true)
+    toggleUpdateFunctions["NPC Detection"](true)
+    toggleUpdateFunctions["ESP Display"](true)
+    toggleUpdateFunctions["Team Check"](true)
+    toggleUpdateFunctions["Aimbot"](false)
+    toggleUpdateFunctions["Wall Check"](true)
+    toggleUpdateFunctions["Aimbot Team Check"](true)
+    toggleUpdateFunctions["Melee Aura"](false)
+    toggleUpdateFunctions["Melee Team Check"](true)
+    toggleUpdateFunctions["Attack NPCs"](true)
+    toggleUpdateFunctions["Multi-Target"](true)
+    
+    -- Remove visualizers
+    if FOVCircle then
+        FOVCircle:Remove()
+        FOVCircle = nil
+    end
+    
+    if MeleeAuraVisualizer then
+        MeleeAuraVisualizer:Remove()
+        MeleeAuraVisualizer = nil
+    end
+    
+    print("Settings reset to defaults!")
+end)
+
+-- Update scroll frame size
+UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, UIListLayout.AbsoluteContentSize.Y + 10)
+end)
+
+-- GUI Toggle Function
+local function toggleGUI()
+    GUIVisible = not GUIVisible
+    
+    if GUIVisible then
+        MainFrame.Visible = true
+        ToggleButton.Text = "✕"
+        
+        -- Animate in
+        MainFrame.Position = UDim2.new(0.5, -140, 0, -480)
+        local tween = TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            Position = UDim2.new(0.5, -140, 0.5, -240)
+        })
+        tween:Play()
+    else
+        ToggleButton.Text = "⚙"
+        
+        -- Animate out
+        local tween = TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+            Position = UDim2.new(0.5, -140, 0, -480)
+        })
+        tween:Play()
+        tween.Completed:Connect(function()
+            MainFrame.Visible = false
+        end)
+    end
+end
+
+-- Make GUI draggable
+local isDragging = false
+local dragStart, frameStart
+
+DraggableFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        isDragging = true
+        dragStart = input.Position
+        frameStart = MainFrame.Position
+    end
+end)
+
+DraggableFrame.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        isDragging = false
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if isDragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - dragStart
+        MainFrame.Position = UDim2.new(
+            frameStart.X.Scale, frameStart.X.Offset + delta.X,
+            frameStart.Y.Scale, frameStart.Y.Offset + delta.Y
+        )
+    end
+end)
+
+-- Button Events
+CloseButton.MouseButton1Click:Connect(toggleGUI)
+ToggleButton.MouseButton1Click:Connect(toggleGUI)
+
+-- Rest of the functions remain the same (unchanged from previous version)
+-- [All the rest of your functions: isEnemy, createPlayerESPBox, etc...]
+-- I'll continue with the rest of the code but keep it compact
+
+-- Function to check if a player is an enemy
+local function isEnemy(player)
+    if not _G.TeamCheck then return true end
+    if not LocalPlayer.Team or not player.Team then return true end
+    return LocalPlayer.Team ~= player.Team
+end
+
+local function isAimbotEnemy(player)
+    if not _G.AimbotTeamCheck then return true end
+    if not LocalPlayer.Team or not player.Team then return true end
+    return LocalPlayer.Team ~= player.Team
+end
+
+local function isMeleeEnemy(player)
+    if not _G.MeleeAuraTeamCheck then return true end
+    if not LocalPlayer.Team or not player.Team then return true end
+    return LocalPlayer.Team ~= player.Team
+end
+
+-- ESP Functions
+local function createPlayerESPBox(character)
+    if not character or not character:FindFirstChild("Head") then return nil end
+    
+    local player = Players:GetPlayerFromCharacter(character)
+    if not player then return nil end
+    
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "PlayerESP_Highlight"
+    highlight.Adornee = character
+    highlight.FillColor = isEnemy(player) and Color3.fromRGB(255, 50, 50) or Color3.fromRGB(50, 150, 255)
+    highlight.FillTransparency = _G.ESPTransparency
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.OutlineTransparency = 0
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.Parent = character
+    
+    PlayerESPBoxes[character] = { Highlight = highlight, Player = player }
+    return PlayerESPBoxes[character]
+end
+
+local function createNPCESPBox(character)
+    if not character or not character:FindFirstChild("Head") then return nil end
+    
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "NPCESP_Highlight"
+    highlight.Adornee = character
+    highlight.FillColor = Color3.fromRGB(255, 150, 0)
+    highlight.FillTransparency = _G.ESPTransparency
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.OutlineTransparency = 0
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.Parent = character
+    
+    ESPBoxes[character] = { Highlight = highlight, IsNPC = true }
+    return ESPBoxes[character]
+end
+
+local function updateESP(character, espData)
+    if not character or not espData then return end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+    
+    if humanoid.Health <= 0 then
+        if espData.Highlight then espData.Highlight:Destroy() end
+        if espData.Player then
+            PlayerESPBoxes[character] = nil
+        else
+            ESPBoxes[character] = nil
+        end
+        return
+    end
+end
+
+local function findNPCs()
+    if not _G.NPCEnabled then return {} end
+    local npcs = {}
+    
+    for _, model in ipairs(workspace:GetDescendants()) do
+        if model:IsA("Model") and model:FindFirstChildOfClass("Humanoid") then
+            local isPlayer = false
+            for _, player in ipairs(Players:GetPlayers()) do
+                if player.Character == model then
+                    isPlayer = true
+                    break
+                end
+            end
+            
+            if not isPlayer and not TrackedNPCs[model] then
+                table.insert(npcs, model)
+                TrackedNPCs[model] = true
+            end
+        end
+    end
+    
+    return npcs
+end
+
+-- Aimbot Functions
+local function createFOVCircle()
+    if not FOVCircle then
+        FOVCircle = Drawing.new("Circle")
+        FOVCircle.Visible = true
+        FOVCircle.Thickness = 2
+        FOVCircle.Color = Color3.fromRGB(255, 100, 100)
+        FOVCircle.Transparency = 1
+        FOVCircle.Radius = _G.AimbotFOV
+        FOVCircle.Filled = false
+        FOVCircle.NumSides = 32
+    end
+    return FOVCircle
+end
+
+local function isWallCheckPassed(targetPart)
+    if not _G.WallCheck then return true end
+    
+    local origin = Camera.CFrame.Position
+    local targetPosition = targetPart.Position + Vector3.new(0, _G.AimbotHeightOffset, 0)
+    local direction = (targetPosition - origin).Unit
+    local distance = (targetPosition - origin).Magnitude
+    
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+    raycastParams.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
+    raycastParams.IgnoreWater = true
+    
+    local result = workspace:Raycast(origin, direction * distance, raycastParams)
+    if result then
+        local hitParent = result.Instance:FindFirstAncestorOfClass("Model")
+        return hitParent and hitParent == targetPart.Parent
+    end
+    
+    return true
+end
+
+local function smoothAim(currentCFrame, targetPosition, smoothness)
+    local currentLook = currentCFrame.LookVector
+    local targetLook = (targetPosition - currentCFrame.Position).Unit
+    local newLook = currentLook:Lerp(targetLook, smoothness)
+    return CFrame.new(currentCFrame.Position, currentCFrame.Position + newLook)
+end
+
+local function getAimbotTargets()
+    local targets = {}
+    local currentTime = tick()
+    
+    if currentTime - LastCacheUpdate > 0.5 then
+        NPCsCache = findNPCs()
+        LastCacheUpdate = currentTime
+    end
+    
+    for _, npc in ipairs(NPCsCache) do
+        if npc and npc.Parent then
+            local humanoid = npc:FindFirstChildOfClass("Humanoid")
+            if humanoid and humanoid.Health > 0 then
+                table.insert(targets, {Model = npc, IsNPC = true})
+            end
+        end
+    end
+    
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+            if humanoid and humanoid.Health > 0 then
+                if _G.AimbotTeamCheck then
+                    if isAimbotEnemy(player) then
+                        table.insert(targets, {Model = player.Character, IsNPC = false, Player = player})
+                    end
+                else
+                    table.insert(targets, {Model = player.Character, IsNPC = false, Player = player})
+                end
+            end
+        end
+    end
+    
+    return targets
+end
+
+local function getClosestTargetInFOV()
+    if not _G.AimbotEnabled then return nil end
+    
+    local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    local closestDist = _G.AimbotFOV
+    local closestTarget = nil
+    local closestPart = nil
+    local closestPosition = nil
+    
+    local targets = getAimbotTargets()
+    
+    for _, targetData in ipairs(targets) do
+        local model = targetData.Model
+        local targetPart = model:FindFirstChild(_G.AimbotTargetPart) or model:FindFirstChild("Head") or model:FindFirstChild("HumanoidRootPart")
+        
+        if targetPart then
+            local targetPosition = targetPart.Position + Vector3.new(0, _G.AimbotHeightOffset, 0)
+            local screenPos, onScreen = Camera:WorldToScreenPoint(targetPosition)
+            
+            if onScreen then
+                local dist = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
+                if dist < closestDist then
+                    if isWallCheckPassed(targetPart) then
+                        closestDist = dist
+                        closestTarget = targetData
+                        closestPart = targetPart
+                        closestPosition = targetPosition
+                    end
+                end
+            end
+        end
+    end
+    
+    return closestTarget, closestPart, closestPosition
+end
+
+-- Melee Aura Functions
+local function createMeleeAuraVisualizer()
+    if not MeleeAuraVisualizer then
+        MeleeAuraVisualizer = Instance.new("Part")
+        MeleeAuraVisualizer.Name = "MeleeAuraVisualizer"
+        MeleeAuraVisualizer.Shape = Enum.PartType.Ball
+        MeleeAuraVisualizer.Size = Vector3.new(_G.MeleeAuraRange * 2, _G.MeleeAuraRange * 2, _G.MeleeAuraRange * 2)
+        MeleeAuraVisualizer.Transparency = 0.7
+        MeleeAuraVisualizer.Color = Color3.fromRGB(0, 255, 150)
+        MeleeAuraVisualizer.Material = Enum.Material.Neon
+        MeleeAuraVisualizer.CanCollide = false
+        MeleeAuraVisualizer.Anchored = true
+        MeleeAuraVisualizer.Parent = workspace
+    end
+    return MeleeAuraVisualizer
+end
+
+local function getMeleeWeapon()
+    local character = LocalPlayer.Character
+    if not character then return nil end
+    
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return nil end
+    
+    local tool = humanoid:FindFirstChildOfClass("Tool") or character:FindFirstChildOfClass("Tool")
+    if tool then return tool end
+    
+    if _G.MeleeAuraAutoEquip then
+        local backpack = LocalPlayer:FindFirstChild("Backpack")
+        if backpack then
+            for _, item in ipairs(backpack:GetChildren()) do
+                if item:IsA("Tool") and item:FindFirstChild("Handle") then
+                    humanoid:EquipTool(item)
+                    return item
+                end
+            end
+        end
+    end
+    
+    return nil
+end
+
+local function getTargetHitParts(targetCharacter)
+    local hitParts = {}
+    local bodyParts = {
+        "Head", "UpperTorso", "LowerTorso", "Torso",
+        "RightUpperArm", "RightLowerArm", "RightHand", "Right Arm",
+        "LeftUpperArm", "LeftLowerArm", "LeftHand", "Left Arm",
+        "RightUpperLeg", "RightLowerLeg", "RightFoot", "Right Leg",
+        "LeftUpperLeg", "LeftLowerLeg", "LeftFoot", "Left Leg",
+        "HumanoidRootPart"
+    }
+    
+    for _, partName in ipairs(bodyParts) do
+        local part = targetCharacter:FindFirstChild(partName)
+        if part then table.insert(hitParts, part) end
+    end
+    
+    if #hitParts == 0 then
+        table.insert(hitParts, targetCharacter)
+    end
+    
+    return hitParts
+end
+
+local function calculateDistance(position1, position2)
+    return (position1 - position2).Magnitude
+end
+
+local function getTargetsInRange()
+    local targets = {}
+    local character = LocalPlayer.Character
+    if not character then return targets end
+    
+    local rootPart = character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Head")
+    if not rootPart then return targets end
+    
+    local position = rootPart.Position
+    
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local targetCharacter = player.Character
+            local humanoid = targetCharacter:FindFirstChildOfClass("Humanoid")
+            
+            if humanoid and humanoid.Health > 0 then
+                local closestDistance = math.huge
+                local closestPart = nil
+                
+                local bodyParts = getTargetHitParts(targetCharacter)
+                for _, part in ipairs(bodyParts) do
+                    local distance = calculateDistance(position, part.Position)
+                    if distance < closestDistance then
+                        closestDistance = distance
+                        closestPart = part
+                    end
+                end
+                
+                if closestPart and closestDistance <= _G.MeleeAuraRange then
+                    if _G.MeleeAuraTeamCheck then
+                        if isMeleeEnemy(player) then
+                            table.insert(targets, {
+                                Character = targetCharacter,
+                                Player = player,
+                                Distance = closestDistance,
+                                AllParts = bodyParts
+                            })
+                        end
+                    else
+                        table.insert(targets, {
+                            Character = targetCharacter,
+                            Player = player,
+                            Distance = closestDistance,
+                            AllParts = bodyParts
+                        })
+                    end
+                end
+            end
+        end
+    end
+    
+    if _G.MeleeAuraNPCEnabled then
+        local npcs = findNPCs()
+        for _, npc in ipairs(npcs) do
+            local humanoid = npc:FindFirstChildOfClass("Humanoid")
+            if humanoid and humanoid.Health > 0 then
+                local closestDistance = math.huge
+                local closestPart = nil
+                
+                local bodyParts = getTargetHitParts(npc)
+                for _, part in ipairs(bodyParts) do
+                    local distance = calculateDistance(position, part.Position)
+                    if distance < closestDistance then
+                        closestDistance = distance
+                        closestPart = part
+                    end
+                end
+                
+                if closestPart and closestDistance <= _G.MeleeAuraRange then
+                    table.insert(targets, {
+                        Character = npc,
+                        IsNPC = true,
+                        Distance = closestDistance,
+                        AllParts = bodyParts
+                    })
+                end
+            end
+        end
+    end
+    
+    table.sort(targets, function(a, b) return a.Distance < b.Distance end)
+    if #targets > _G.MeleeAuraMaxTargets then
+        targets = {table.unpack(targets, 1, _G.MeleeAuraMaxTargets)}
+    end
+    
+    return targets
+end
+
+local function executeMeleeAttack(tool, targets)
+    if not tool or #targets == 0 then return false end
+    
+    local hits = {}
+    for _, target in ipairs(targets) do
+        local targetCharacter = target.Character
+        if targetCharacter and targetCharacter.Parent then
+            local bodyParts = target.AllParts or getTargetHitParts(targetCharacter)
+            for i = 1, _G.MeleeAuraHitsPerAttack do
+                if #bodyParts > 0 then
+                    local hitPart = bodyParts[(i % #bodyParts) + 1]
+                    table.insert(hits, {
+                        hitPart = hitPart,
+                        targetCharacter = targetCharacter
+                    })
+                end
+            end
+        end
+    end
+    
+    if #hits == 0 then return false end
+    
+    local args = {
+        "Hit",
+        tool,
+        _G.MeleeAuraHitDirection,
+        hits
+    }
+    
+    local remoteEvent = ReplicatedStorage:FindFirstChild("Events")
+    if remoteEvent then
+        remoteEvent = remoteEvent:FindFirstChild("MeleeSystem")
+        if remoteEvent and remoteEvent:IsA("RemoteEvent") then
+            remoteEvent:FireServer(unpack(args))
+            return true
+        end
+    end
+    
+    return false
+end
+
+local function executeMeleeAura()
+    if not _G.MeleeAuraEnabled then return end
+    local currentTime = tick()
+    if currentTime - LastAttackTime < _G.MeleeAuraDelay then return end
+    
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then return end
+    
+    local meleeWeapon = getMeleeWeapon()
+    if not meleeWeapon then return end
+    
+    local targets = getTargetsInRange()
+    if #targets == 0 then return end
+    
+    if _G.MeleeAuraMultiTarget then
+        local attackTargets = {}
+        for _, target in ipairs(targets) do
+            if target.Distance <= _G.MeleeAuraRange then
+                table.insert(attackTargets, target)
+            end
+        end
+        if #attackTargets > 0 then
+            executeMeleeAttack(meleeWeapon, attackTargets)
+        end
+    else
+        local closestTarget = targets[1]
+        if closestTarget and closestTarget.Distance <= _G.MeleeAuraRange then
+            executeMeleeAttack(meleeWeapon, {closestTarget})
+        end
+    end
+    
+    LastAttackTime = currentTime
+end
+
+-- Main hitbox adjustment function
+local function adjustHitbox(character, headSize, isNPC)
+    pcall(function()
+        local head = character:FindFirstChild("Head")
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        
+        if head and humanoid then
+            if humanoid.Health > 0 then
+                head.Size = Vector3.new(headSize, headSize, headSize)
+                head.Transparency = 0.5
+                head.BrickColor = isNPC and BrickColor.new("Bright orange") or BrickColor.new("Bright red")
+                head.Material = Enum.Material.Neon
+                head.CanCollide = false
+                head.Massless = true
+                
+                if _G.ESPEnabled then
+                    local espData
+                    if isNPC then
+                        espData = ESPBoxes[character] or createNPCESPBox(character)
+                    else
+                        espData = PlayerESPBoxes[character] or createPlayerESPBox(character)
+                    end
+                    if espData then
+                        updateESP(character, espData)
+                    end
+                end
+            else
+                head.Transparency = 1
+                head.CanTouch = false
+                head.CanQuery = false
+                
+                local espData = isNPC and ESPBoxes[character] or PlayerESPBoxes[character]
+                if espData then
+                    if espData.Highlight then espData.Highlight:Destroy() end
+                    if isNPC then
+                        ESPBoxes[character] = nil
+                    else
+                        PlayerESPBoxes[character] = nil
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- Main loop
+RunService.RenderStepped:Connect(function()
+    if not _G.Disabled then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                local character = player.Character
+                if character then
+                    if _G.TeamCheck and not isEnemy(player) then
+                        local head = character:FindFirstChild("Head")
+                        if head then
+                            head.Size = Vector3.new(2, 1, 1)
+                            head.Transparency = 0
+                            head.BrickColor = BrickColor.new("Medium stone grey")
+                            head.Material = Enum.Material.Plastic
+                            head.CanCollide = true
+                            head.Massless = false
+                        end
+                        local espData = PlayerESPBoxes[character]
+                        if espData then
+                            if espData.Highlight then espData.Highlight:Destroy() end
+                            PlayerESPBoxes[character] = nil
+                        end
+                    else
+                        adjustHitbox(character, _G.PlayerHeadSize, false)
+                    end
+                end
+            end
+        end
+        
+        if _G.NPCEnabled then
+            local npcs = findNPCs()
+            for _, npc in ipairs(npcs) do
+                adjustHitbox(npc, _G.NPCHeadSize, true)
+            end
+        end
+        
+        for character, espData in pairs(ESPBoxes) do
+            if not character.Parent then
+                if espData.Highlight then espData.Highlight:Destroy() end
+                ESPBoxes[character] = nil
+            elseif espData.IsNPC then
+                TrackedNPCs[character] = nil
+            end
+        end
+        
+        for character, espData in pairs(PlayerESPBoxes) do
+            if not character.Parent then
+                if espData.Highlight then espData.Highlight:Destroy() end
+                PlayerESPBoxes[character] = nil
+            end
+        end
+    else
+        for _, player in ipairs(Players:GetPlayers()) do
+            local character = player.Character
+            if character then
+                local head = character:FindFirstChild("Head")
+                if head then
+                    head.Size = Vector3.new(2, 1, 1)
+                    head.Transparency = 0
+                    head.BrickColor = BrickColor.new("Medium stone grey")
+                    head.Material = Enum.Material.Plastic
+                    head.CanCollide = true
+                    head.Massless = false
+                end
+            end
+        end
+        
+        for character, espData in pairs(ESPBoxes) do
+            if espData.Highlight then espData.Highlight:Destroy() end
+            ESPBoxes[character] = nil
+        end
+        
+        for character, espData in pairs(PlayerESPBoxes) do
+            if espData.Highlight then espData.Highlight:Destroy() end
+            PlayerESPBoxes[character] = nil
+        end
+    end
+    
+    if _G.AimbotEnabled then
+        if FOVCircle then
+            FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+            FOVCircle.Radius = _G.AimbotFOV
+            FOVCircle.Visible = true
+        end
+        
+        local targetData, targetPart, targetPosition = getClosestTargetInFOV()
+        if targetData and targetPart and targetPosition then
+            local newCFrame = smoothAim(Camera.CFrame, targetPosition, _G.AimbotSmoothness)
+            Camera.CFrame = newCFrame
+        end
+    elseif FOVCircle then
+        FOVCircle.Visible = false
+    end
+    
+    if _G.MeleeAuraEnabled then
+        local character = LocalPlayer.Character
+        if character and MeleeAuraVisualizer then
+            local rootPart = character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Head")
+            if rootPart then
+                MeleeAuraVisualizer.Position = rootPart.Position
+                MeleeAuraVisualizer.Transparency = 0.7
+            end
+        end
+        executeMeleeAura()
+    elseif MeleeAuraVisualizer then
+        MeleeAuraVisualizer.Transparency = 1
+    end
+end)
+
+-- Keybinds
+UserInputService.InputBegan:Connect(function(input, processed)
+    if not processed then
+        if input.KeyCode == Enum.KeyCode.RightShift then
+            _G.Disabled = not _G.Disabled
+            if toggleUpdateFunctions["Enable Hitboxes"] then
+                toggleUpdateFunctions["Enable Hitboxes"](not _G.Disabled)
+            end
+        elseif input.KeyCode == Enum.KeyCode.Insert then
+            toggleGUI()
+        elseif input.KeyCode == Enum.KeyCode.F1 then
+            _G.AimbotEnabled = not _G.AimbotEnabled
+            if toggleUpdateFunctions["Aimbot"] then
+                toggleUpdateFunctions["Aimbot"](_G.AimbotEnabled)
+            end
+            if _G.AimbotEnabled and not FOVCircle then
+                createFOVCircle()
+            elseif not _G.AimbotEnabled and FOVCircle then
+                FOVCircle:Remove()
+                FOVCircle = nil
+            end
+            print("Aimbot: " .. (_G.AimbotEnabled and "ON" or "OFF"))
+        elseif input.KeyCode == Enum.KeyCode.F2 then
+            _G.WallCheck = not _G.WallCheck
+            if toggleUpdateFunctions["Wall Check"] then
+                toggleUpdateFunctions["Wall Check"](_G.WallCheck)
+            end
+            print("Wall Check: " .. (_G.WallCheck and "ON" or "OFF"))
+        elseif input.KeyCode == Enum.KeyCode.F3 then
+            _G.MeleeAuraEnabled = not _G.MeleeAuraEnabled
+            if toggleUpdateFunctions["Melee Aura"] then
+                toggleUpdateFunctions["Melee Aura"](_G.MeleeAuraEnabled)
+            end
+            if _G.MeleeAuraEnabled then
+                createMeleeAuraVisualizer()
+            elseif MeleeAuraVisualizer then
+                MeleeAuraVisualizer:Remove()
+                MeleeAuraVisualizer = nil
+            end
+            print("Melee Aura: " .. (_G.MeleeAuraEnabled and "ON" or "OFF"))
+        elseif input.KeyCode == Enum.KeyCode.F4 then
+            if _G.MeleeAuraEnabled then
+                for i = 1, 5 do
+                    executeMeleeAura()
+                    task.wait(0.01)
+                end
+                print("Rapid melee attack triggered")
+            end
+        end
+    end
+end)
+
+-- Initialize
+print("Hitbox & Aimbot Configurator Loaded!")
+print("Press INSERT to toggle GUI")
+print("Press RightShift to toggle hitboxes")
+print("Press F1 to toggle Aimbot")
+print("Press F2 to toggle Wall Check")
+print("Press F3 to toggle Melee Aura")
+print("Press F4 for rapid melee attack")
+print("GUI starts hidden - click the gear icon to open it")
+print("Player hitbox default: 1 (headshot mode)")
+
+if _G.AimbotEnabled then createFOVCircle() end
+if _G.MeleeAuraEnabled then createMeleeAuraVisualizer() end
+
+game:GetService("RunService").Heartbeat:Connect(function()
+    if not _G.MeleeAuraEnabled and MeleeAuraVisualizer then
+        MeleeAuraVisualizer:Remove()
+        MeleeAuraVisualizer = nil
+    end
+    if not _G.AimbotEnabled and FOVCircle then
+        FOVCircle:Remove()
+        FOVCircle = nil
+    end
+end)
