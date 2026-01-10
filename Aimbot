@@ -5,6 +5,7 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
 local ProximityPromptService = game:GetService("ProximityPromptService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 -- Settings
 _G.NPCHeadSize = 20
@@ -25,6 +26,7 @@ _G.AimbotPrediction = true -- Predict enemy movement
 _G.AimbotPredictionStrength = 0.3 -- How much to lead shots (0-1)
 _G.ESPUpdateRate = 0.1 -- ESP update rate in seconds (higher = less lag)
 _G.AimbotUpdateRate = 0.03 -- Lower = better tracking for moving enemies
+_G.AutoCookEnabled = false -- SINGLE Auto Cook toggle
 
 -- Storage
 local TrackedNPCs = {}
@@ -38,6 +40,10 @@ local lastAimbotUpdate = 0
 local enemyVelocity = {}
 local enemyLastPositions = {}
 local enemyLastUpdate = {}
+
+-- Bread cooking variables
+local autoCookConnection = nil
+local lastCookTime = 0
 
 -- GUI State
 local GUIVisible = false
@@ -135,7 +141,7 @@ Title.Name = "Title"
 Title.Size = UDim2.new(1, -40, 1, 0)
 Title.Position = UDim2.new(0, 15, 0, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "NPC HITBOX CONFIG"
+Title.Text = "WHIZZBANG"
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 16
@@ -175,7 +181,7 @@ ScrollFrame.Size = UDim2.new(1, 0, 1, 0)
 ScrollFrame.BackgroundTransparency = 1
 ScrollFrame.ScrollBarThickness = 6
 ScrollFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 90)
-ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 1750) -- Increased for prediction controls
+ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 2200) -- Increased for bread cooking section
 ScrollFrame.ScrollingEnabled = true
 ScrollFrame.Active = true
 ScrollFrame.Selectable = true
@@ -186,314 +192,122 @@ local UIListLayout = Instance.new("UIListLayout")
 UIListLayout.Padding = UDim.new(0, 15)
 UIListLayout.Parent = ScrollFrame
 
--- Function to create number input with text box
-local function createNumberInput(label, min, max, default, callback)
-    local container = Instance.new("Frame")
-    container.Size = UDim2.new(1, 0, 0, 70)
-    container.BackgroundTransparency = 1
-    
-    local labelText = Instance.new("TextLabel")
-    labelText.Size = UDim2.new(1, 0, 0, 20)
-    labelText.BackgroundTransparency = 1
-    labelText.Text = label
-    labelText.TextColor3 = Color3.fromRGB(200, 200, 200)
-    labelText.Font = Enum.Font.GothamMedium
-    labelText.TextSize = 13
-    labelText.TextXAlignment = Enum.TextXAlignment.Left
-    labelText.Parent = container
-    
-    local inputFrame = Instance.new("Frame")
-    inputFrame.Size = UDim2.new(1, 0, 0, 40)
-    inputFrame.Position = UDim2.new(0, 0, 0, 25)
-    inputFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
-    inputFrame.BorderSizePixel = 0
-    inputFrame.Parent = container
-    
-    local inputCorner = Instance.new("UICorner")
-    inputCorner.CornerRadius = UDim.new(0, 8)
-    inputCorner.Parent = inputFrame
-    
-    local inputStroke = Instance.new("UIStroke")
-    inputStroke.Color = Color3.fromRGB(60, 60, 70)
-    inputStroke.Thickness = 2
-    inputStroke.Parent = inputFrame
-    
-    local textBox = Instance.new("TextBox")
-    textBox.Name = "ValueInput"
-    textBox.Size = UDim2.new(0.6, 0, 1, 0)
-    textBox.Position = UDim2.new(0.2, 0, 0, 0)
-    textBox.BackgroundTransparency = 1
-    textBox.Text = tostring(default)
-    textBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-    textBox.Font = Enum.Font.Gotham
-    textBox.TextSize = 14
-    textBox.TextXAlignment = Enum.TextXAlignment.Center
-    textBox.ClearTextOnFocus = false
-    textBox.Parent = inputFrame
-    
-    -- Increment/Decrement buttons
-    local minusButton = Instance.new("TextButton")
-    minusButton.Name = "MinusButton"
-    minusButton.Size = UDim2.new(0, 40, 1, 0)
-    minusButton.Position = UDim2.new(0, 0, 0, 0)
-    minusButton.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
-    minusButton.BackgroundTransparency = 0.3
-    minusButton.Text = "-"
-    minusButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    minusButton.Font = Enum.Font.GothamBold
-    minusButton.TextSize = 18
-    minusButton.Parent = inputFrame
-    
-    local minusCorner = Instance.new("UICorner")
-    minusCorner.CornerRadius = UDim.new(0, 8)
-    minusCorner.Parent = minusButton
-    
-    local plusButton = Instance.new("TextButton")
-    plusButton.Name = "PlusButton"
-    plusButton.Size = UDim2.new(0, 40, 1, 0)
-    plusButton.Position = UDim2.new(1, -40, 0, 0)
-    plusButton.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
-    plusButton.BackgroundTransparency = 0.3
-    plusButton.Text = "+"
-    plusButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    plusButton.Font = Enum.Font.GothamBold
-    plusButton.TextSize = 18
-    plusButton.Parent = inputFrame
-    
-    local plusCorner = Instance.new("UICorner")
-    plusCorner.CornerRadius = UDim.new(0, 8)
-    plusCorner.Parent = plusButton
-    
-    -- Function to validate and update value
-    local function updateValue(newValue)
-        local num = tonumber(newValue)
-        if num then
-            num = math.clamp(num, min, max)
-            textBox.Text = tostring(num)
-            callback(num)
-        else
-            textBox.Text = tostring(default)
-        end
-    end
-    
-    -- Text box events
-    textBox.FocusLost:Connect(function(enterPressed)
-        updateValue(textBox.Text)
-    end)
-    
-    -- Button events
-    minusButton.MouseButton1Click:Connect(function()
-        local current = tonumber(textBox.Text) or default
-        updateValue(current - 1)
-    end)
-    
-    plusButton.MouseButton1Click:Connect(function()
-        local current = tonumber(textBox.Text) or default
-        updateValue(current + 1)
-    end)
-    
-    return container
-end
-
--- Function to create ON/OFF toggle buttons
-local function createToggleButton(label, default, callback)
-    local container = Instance.new("Frame")
-    container.Size = UDim2.new(1, 0, 0, 45)
-    container.BackgroundTransparency = 1
-    
-    local labelText = Instance.new("TextLabel")
-    labelText.Size = UDim2.new(0.6, 0, 1, 0)
-    labelText.BackgroundTransparency = 1
-    labelText.Text = label
-    labelText.TextColor3 = Color3.fromRGB(220, 220, 220)
-    labelText.Font = Enum.Font.GothamMedium
-    labelText.TextSize = 14
-    labelText.TextXAlignment = Enum.TextXAlignment.Left
-    labelText.Parent = container
-    
-    -- Create the toggle button
-    local toggleButton = Instance.new("TextButton")
-    toggleButton.Size = UDim2.new(0.35, 0, 0.7, 0)
-    toggleButton.Position = UDim2.new(0.65, 0, 0.15, 0)
-    toggleButton.BackgroundColor3 = default and Color3.fromRGB(0, 120, 215) or Color3.fromRGB(200, 50, 50)
-    toggleButton.Text = default and "ON" or "OFF"
-    toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    toggleButton.Font = Enum.Font.GothamBold
-    toggleButton.TextSize = 14
-    toggleButton.Parent = container
-    
-    local toggleCorner = Instance.new("UICorner")
-    toggleCorner.CornerRadius = UDim.new(0, 8)
-    toggleCorner.Parent = toggleButton
-    
-    local toggleStroke = Instance.new("UIStroke")
-    toggleStroke.Color = Color3.fromRGB(60, 60, 70)
-    toggleStroke.Thickness = 2
-    toggleStroke.Parent = toggleButton
-    
-    -- Store the current state
-    local state = default
-    
-    -- Function to update button appearance
-    local function updateButton()
-        if state then
-            toggleButton.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
-            toggleButton.Text = "ON"
-        else
-            toggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-            toggleButton.Text = "OFF"
-        end
-    end
-    
-    -- Initialize button
-    updateButton()
-    
-    -- Button click event
-    toggleButton.MouseButton1Click:Connect(function()
-        state = not state
-        updateButton()
-        callback(state)
-    end)
-    
-    return container, function(newState)
-        state = newState
-        updateButton()
-    end
-end
-
--- Function to create dropdown for aimbot target part
-local function createAimbotDropdown(label, options, default, callback)
-    local container = Instance.new("Frame")
-    container.Size = UDim2.new(1, 0, 0, 70)
-    container.BackgroundTransparency = 1
-    
-    local labelText = Instance.new("TextLabel")
-    labelText.Size = UDim2.new(1, 0, 0, 20)
-    labelText.BackgroundTransparency = 1
-    labelText.Text = label
-    labelText.TextColor3 = Color3.fromRGB(200, 200, 200)
-    labelText.Font = Enum.Font.GothamMedium
-    labelText.TextSize = 13
-    labelText.TextXAlignment = Enum.TextXAlignment.Left
-    labelText.Parent = container
-    
-    local dropdownFrame = Instance.new("Frame")
-    dropdownFrame.Size = UDim2.new(1, 0, 0, 40)
-    dropdownFrame.Position = UDim2.new(0, 0, 0, 25)
-    dropdownFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
-    dropdownFrame.BorderSizePixel = 0
-    dropdownFrame.Parent = container
-    
-    local dropdownCorner = Instance.new("UICorner")
-    dropdownCorner.CornerRadius = UDim.new(0, 8)
-    dropdownCorner.Parent = dropdownFrame
-    
-    local dropdownStroke = Instance.new("UIStroke")
-    dropdownStroke.Color = Color3.fromRGB(60, 60, 70)
-    dropdownStroke.Thickness = 2
-    dropdownStroke.Parent = dropdownFrame
-    
-    local selectedText = Instance.new("TextLabel")
-    selectedText.Size = UDim2.new(0.8, 0, 1, 0)
-    selectedText.Position = UDim2.new(0.1, 0, 0, 0)
-    selectedText.BackgroundTransparency = 1
-    selectedText.Text = default
-    selectedText.TextColor3 = Color3.fromRGB(255, 255, 255)
-    selectedText.Font = Enum.Font.Gotham
-    selectedText.TextSize = 14
-    selectedText.TextXAlignment = Enum.TextXAlignment.Left
-    selectedText.Parent = dropdownFrame
-    
-    local dropdownButton = Instance.new("TextButton")
-    dropdownButton.Size = UDim2.new(1, 0, 1, 0)
-    dropdownButton.BackgroundTransparency = 1
-    dropdownButton.Text = ""
-    dropdownButton.Parent = dropdownFrame
-    
-    local arrow = Instance.new("TextLabel")
-    arrow.Size = UDim2.new(0, 20, 0, 20)
-    arrow.Position = UDim2.new(1, -25, 0.5, -10)
-    arrow.BackgroundTransparency = 1
-    arrow.Text = "▼"
-    arrow.TextColor3 = Color3.fromRGB(180, 180, 180)
-    arrow.Font = Enum.Font.Gotham
-    arrow.TextSize = 12
-    arrow.Parent = dropdownFrame
-    
-    -- Dropdown options
-    local optionsFrame = Instance.new("Frame")
-    optionsFrame.Size = UDim2.new(1, 0, 0, 80)
-    optionsFrame.Position = UDim2.new(0, 0, 1, 5)
-    optionsFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
-    optionsFrame.BorderSizePixel = 0
-    optionsFrame.Visible = false
-    optionsFrame.ZIndex = 10
-    optionsFrame.Parent = dropdownFrame
-    
-    local optionsCorner = Instance.new("UICorner")
-    optionsCorner.CornerRadius = UDim.new(0, 8)
-    optionsCorner.Parent = optionsFrame
-    
-    local optionsStroke = Instance.new("UIStroke")
-    optionsStroke.Color = Color3.fromRGB(60, 60, 70)
-    optionsStroke.Thickness = 2
-    optionsStroke.Parent = optionsFrame
-    
-    local optionsLayout = Instance.new("UIListLayout")
-    optionsLayout.Padding = UDim.new(0, 2)
-    optionsLayout.Parent = optionsFrame
-    
-    -- Create option buttons
-    for _, option in ipairs(options) do
-        local optionButton = Instance.new("TextButton")
-        optionButton.Size = UDim2.new(1, -10, 0, 25)
-        optionButton.Position = UDim2.new(0, 5, 0, 0)
-        optionButton.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
-        optionButton.Text = option
-        optionButton.TextColor3 = Color3.fromRGB(220, 220, 220)
-        optionButton.Font = Enum.Font.Gotham
-        optionButton.TextSize = 12
-        optionButton.AutoButtonColor = false
-        optionButton.Parent = optionsFrame
-        
-        local optionCorner = Instance.new("UICorner")
-        optionCorner.CornerRadius = UDim.new(0, 4)
-        optionCorner.Parent = optionButton
-        
-        optionButton.MouseEnter:Connect(function()
-            optionButton.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
-        end)
-        
-        optionButton.MouseLeave:Connect(function()
-            optionButton.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
-        end)
-        
-        optionButton.MouseButton1Click:Connect(function()
-            selectedText.Text = option
-            callback(option)
-            optionsFrame.Visible = false
-        end)
-    end
-    
-    dropdownButton.MouseButton1Click:Connect(function()
-        optionsFrame.Visible = not optionsFrame.Visible
-    end)
-    
-    -- Close dropdown when clicking elsewhere
-    UserInputService.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            local mousePos = UserInputService:GetMouseLocation()
-            local framePos = dropdownFrame.AbsolutePosition
-            local frameSize = dropdownFrame.AbsoluteSize
-            
-            if mousePos.X < framePos.X or mousePos.X > framePos.X + frameSize.X or
-               mousePos.Y < framePos.Y or mousePos.Y > framePos.Y + frameSize.Y + (optionsFrame.Visible and 85 or 0) then
-                optionsFrame.Visible = false
+-- ========== SIMPLIFIED BREAD COOKING SYSTEM ==========
+local function findProximityPrompt()
+    -- Look for any proximity prompt in the workspace
+    for _, obj in pairs(workspace:GetDescendants()) do
+        if obj:IsA("ProximityPrompt") then
+            -- Check if it's likely a "take dough" prompt
+            local promptText = obj.ActionText:lower()
+            if promptText:find("dough") or promptText:find("take") or promptText:find("pick") then
+                return obj
             end
         end
-    end)
+    end
+    return nil
+end
+
+local function activatePrompt()
+    local prompt = findProximityPrompt()
+    if prompt then
+        -- Activate the proximity prompt
+        fireproximityprompt(prompt)
+        print("Activated proximity prompt: " .. prompt.ActionText)
+        return true
+    end
+    return false
+end
+
+local function findToolByName(toolName)
+    local character = LocalPlayer.Character
+    if not character then return nil end
     
-    return container
+    -- Check if tool is already equipped
+    local equippedTool = character:FindFirstChild(toolName)
+    if equippedTool then
+        return equippedTool
+    end
+    
+    -- Check backpack for tool
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    if backpack then
+        -- Check for exact name first
+        local tool = backpack:FindFirstChild(toolName)
+        if not tool then
+            -- Check for case-insensitive match
+            for _, item in ipairs(backpack:GetChildren()) do
+                if item.Name:lower() == toolName:lower() then
+                    return item
+                end
+            end
+        else
+            return tool
+        end
+    end
+    
+    return nil
+end
+
+local function equipTool(toolName)
+    local character = LocalPlayer.Character
+    if not character then return false end
+    
+    local tool = findToolByName(toolName)
+    if tool then
+        -- Equip the tool if it's in backpack
+        if tool.Parent == LocalPlayer.Backpack then
+            tool.Parent = character
+        end
+        
+        -- Try to select the tool
+        LocalPlayer:SetSelectedTool(tool)
+        print("Equipped: " .. toolName)
+        return true
+    end
+    
+    return false
+end
+
+local function cookBread()
+    -- Step 1: Activate proximity prompt for dough
+    activatePrompt()
+    
+    -- Step 2: Auto equip dough
+    equipTool("dough")
+    
+    -- Step 3: Use remote to turn dough into bread
+    local kneadRemote = ReplicatedStorage:WaitForChild("Bread"):WaitForChild("KneadBread")
+    kneadRemote:FireServer("stale bred")
+    
+    -- Step 4: Cook the bread
+    local cookRemote = ReplicatedStorage:WaitForChild("Bread"):WaitForChild("CookRaw")
+    cookRemote:FireServer(10)
+    
+    -- Step 5: Eat the bread (if there's an eat function)
+    -- Note: You may need to add an eat remote if it exists
+    
+    print("Bread cooked! - Full process completed")
+end
+
+local function toggleAutoCook(enabled)
+    _G.AutoCookEnabled = enabled
+    
+    if enabled and not autoCookConnection then
+        print("Auto Cook: ON - Full process loop started")
+        print("Process: Activate prompt → Equip dough → Turn to bread → Cook → Loop")
+        
+        autoCookConnection = RunService.Heartbeat:Connect(function()
+            local currentTime = tick()
+            if currentTime - lastCookTime >= 0.5 then -- Changed to 0.5 seconds for better performance
+                cookBread()
+                lastCookTime = currentTime
+            end
+        end)
+    elseif not enabled and autoCookConnection then
+        print("Auto Cook: OFF")
+        autoCookConnection:Disconnect()
+        autoCookConnection = nil
+    end
 end
 
 -- ========== MODIFIED NPC DETECTION SYSTEM ==========
@@ -1167,7 +981,8 @@ local function onPromptButtonHoldBegan(prompt)
                 connection:Disconnect()
             end
             activePrompts[promptId] = nil
-        end)
+        end
+        )
     end
 end
 
@@ -1214,9 +1029,281 @@ local function toggleInstantInteract(enabled)
     end
 end
 
+-- ========== CLASS SELECTION SYSTEM ==========
+local function selectClass(classType)
+    local remotePath = ReplicatedStorage:WaitForChild("RemoteEvents"):WaitForChild("Player"):WaitForChild("ChooseClass")
+    local args = {}
+    
+    if classType == "medic" then
+        args = {"medic", "medic"}
+    elseif classType == "engineer" then
+        args = {"engi", "engineer"}
+    elseif classType == "rifleman" then
+        args = {"rifle", "rifleman"}
+    elseif classType == "officer" then
+        args = {"officer", "officer"}
+    elseif classType == "machinegun" then
+        args = {"auto", "automatic"}
+    end
+    
+    remotePath:FireServer(unpack(args))
+    print("Selected class: " .. classType)
+end
+
+-- Function to create ON/OFF toggle buttons
+local function createToggleButton(label, default, callback)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, 0, 0, 45)
+    container.BackgroundTransparency = 1
+    
+    local labelText = Instance.new("TextLabel")
+    labelText.Size = UDim2.new(0.6, 0, 1, 0)
+    labelText.BackgroundTransparency = 1
+    labelText.Text = label
+    labelText.TextColor3 = Color3.fromRGB(220, 220, 220)
+    labelText.Font = Enum.Font.GothamMedium
+    labelText.TextSize = 14
+    labelText.TextXAlignment = Enum.TextXAlignment.Left
+    labelText.Parent = container
+    
+    -- Create the toggle button
+    local toggleButton = Instance.new("TextButton")
+    toggleButton.Size = UDim2.new(0.35, 0, 0.7, 0)
+    toggleButton.Position = UDim2.new(0.65, 0, 0.15, 0)
+    toggleButton.BackgroundColor3 = default and Color3.fromRGB(0, 120, 215) or Color3.fromRGB(200, 50, 50)
+    toggleButton.Text = default and "ON" or "OFF"
+    toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggleButton.Font = Enum.Font.GothamBold
+    toggleButton.TextSize = 14
+    toggleButton.Parent = container
+    
+    local toggleCorner = Instance.new("UICorner")
+    toggleCorner.CornerRadius = UDim.new(0, 8)
+    toggleCorner.Parent = toggleButton
+    
+    local toggleStroke = Instance.new("UIStroke")
+    toggleStroke.Color = Color3.fromRGB(60, 60, 70)
+    toggleStroke.Thickness = 2
+    toggleStroke.Parent = toggleButton
+    
+    -- Store the current state
+    local state = default
+    
+    -- Function to update button appearance
+    local function updateButton()
+        if state then
+            toggleButton.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+            toggleButton.Text = "ON"
+        else
+            toggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+            toggleButton.Text = "OFF"
+        end
+    end
+    
+    -- Initialize button
+    updateButton()
+    
+    -- Button click event
+    toggleButton.MouseButton1Click:Connect(function()
+        state = not state
+        updateButton()
+        callback(state)
+    end)
+    
+    return container, function(newState)
+        state = newState
+        updateButton()
+    end
+end
+
 -- ========== YOUR GUI SECTIONS ==========
 -- Store toggle update functions
 local toggleUpdateFunctions = {}
+
+-- Class Selection Section
+local classSection = Instance.new("Frame")
+classSection.Size = UDim2.new(1, 0, 0, 200)
+classSection.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+classSection.BorderSizePixel = 0
+classSection.Active = true
+classSection.Selectable = true
+classSection.Parent = ScrollFrame
+
+local classSectionCorner = Instance.new("UICorner")
+classSectionCorner.CornerRadius = UDim.new(0, 10)
+classSectionCorner.Parent = classSection
+
+local classSectionStroke = Instance.new("UIStroke")
+classSectionStroke.Color = Color3.fromRGB(60, 60, 70)
+classSectionStroke.Thickness = 2
+classSectionStroke.Parent = classSection
+
+local classSectionHeader = Instance.new("TextLabel")
+classSectionHeader.Size = UDim2.new(1, -20, 0, 30)
+classSectionHeader.Position = UDim2.new(0, 10, 0, 5)
+classSectionHeader.BackgroundTransparency = 1
+classSectionHeader.Text = "CLASS SELECTION"
+classSectionHeader.TextColor3 = Color3.fromRGB(100, 200, 255)
+classSectionHeader.Font = Enum.Font.GothamBold
+classSectionHeader.TextSize = 15
+classSectionHeader.TextXAlignment = Enum.TextXAlignment.Left
+classSectionHeader.Parent = classSection
+
+-- Create Class Selection Container
+local classContainer = Instance.new("Frame")
+classContainer.Size = UDim2.new(1, -20, 0, 160)
+classContainer.Position = UDim2.new(0, 10, 0, 35)
+classContainer.BackgroundTransparency = 1
+classContainer.Active = true
+classContainer.Selectable = true
+classContainer.Parent = classSection
+
+-- Create class buttons
+local classButtons = {
+    {name = "Medic", color = Color3.fromRGB(220, 60, 60), classType = "medic"},
+    {name = "Engineer", color = Color3.fromRGB(60, 180, 220), classType = "engineer"},
+    {name = "Rifleman", color = Color3.fromRGB(60, 220, 60), classType = "rifleman"},
+    {name = "Officer", color = Color3.fromRGB(220, 180, 60), classType = "officer"},
+    {name = "Machine Gun", color = Color3.fromRGB(180, 60, 220), classType = "machinegun"}
+}
+
+local buttonWidth = 1
+local buttonHeight = 0.18
+local buttonSpacing = 0.02
+
+for i, classInfo in ipairs(classButtons) do
+    local button = Instance.new("TextButton")
+    button.Name = classInfo.name .. "Button"
+    button.Size = UDim2.new(buttonWidth, 0, buttonHeight, 0)
+    button.Position = UDim2.new(0, 0, (buttonHeight + buttonSpacing) * (i - 1), 0)
+    button.BackgroundColor3 = classInfo.color
+    button.BackgroundTransparency = 0.1
+    button.Text = classInfo.name
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.Font = Enum.Font.GothamBold
+    button.TextSize = 13
+    button.Parent = classContainer
+    
+    local buttonCorner = Instance.new("UICorner")
+    buttonCorner.CornerRadius = UDim.new(0, 6)
+    buttonCorner.Parent = button
+    
+    local buttonStroke = Instance.new("UIStroke")
+    buttonStroke.Color = Color3.fromRGB(80, 80, 90)
+    buttonStroke.Thickness = 2
+    buttonStroke.Parent = button
+    
+    -- Add hover effect
+    button.MouseEnter:Connect(function()
+        button.BackgroundTransparency = 0
+    end)
+    
+    button.MouseLeave:Connect(function()
+        button.BackgroundTransparency = 0.1
+    end)
+    
+    -- Add click event
+    button.MouseButton1Click:Connect(function()
+        selectClass(classInfo.classType)
+    end)
+end
+
+-- SIMPLIFIED BREAD COOKING SECTION (ONE BUTTON ONLY)
+local breadSection = Instance.new("Frame")
+breadSection.Size = UDim2.new(1, 0, 0, 200) -- Reduced height
+breadSection.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+breadSection.BorderSizePixel = 0
+breadSection.Active = true
+breadSection.Selectable = true
+breadSection.Parent = ScrollFrame
+
+local breadSectionCorner = Instance.new("UICorner")
+breadSectionCorner.CornerRadius = UDim.new(0, 10)
+breadSectionCorner.Parent = breadSection
+
+local breadSectionStroke = Instance.new("UIStroke")
+breadSectionStroke.Color = Color3.fromRGB(60, 60, 70)
+breadSectionStroke.Thickness = 2
+breadSectionStroke.Parent = breadSection
+
+local breadSectionHeader = Instance.new("TextLabel")
+breadSectionHeader.Size = UDim2.new(1, -20, 0, 30)
+breadSectionHeader.Position = UDim2.new(0, 10, 0, 5)
+breadSectionHeader.BackgroundTransparency = 1
+breadSectionHeader.Text = "AUTO BREAD COOKING"
+breadSectionHeader.TextColor3 = Color3.fromRGB(220, 180, 100)
+breadSectionHeader.Font = Enum.Font.GothamBold
+breadSectionHeader.TextSize = 15
+breadSectionHeader.TextXAlignment = Enum.TextXAlignment.Left
+breadSectionHeader.Parent = breadSection
+
+-- Create Bread Cooking Container
+local breadContainer = Instance.new("Frame")
+breadContainer.Size = UDim2.new(1, -20, 0, 160) -- Reduced height
+breadContainer.Position = UDim2.new(0, 10, 0, 35)
+breadContainer.BackgroundTransparency = 1
+breadContainer.Active = true
+breadContainer.Selectable = true
+breadContainer.Parent = breadSection
+
+-- SINGLE Auto Cook Toggle Button
+local autoCookToggle, updateAutoCookToggle = createToggleButton("Auto Cook Bread (Full Process)", _G.AutoCookEnabled, function(value)
+    toggleAutoCook(value)
+end)
+autoCookToggle.Position = UDim2.new(0, 0, 0, 0)
+autoCookToggle.Parent = breadContainer
+toggleUpdateFunctions["Auto Cook Bread (Full Process)"] = updateAutoCookToggle
+
+-- Manual Cook Button
+local manualCookButton = Instance.new("TextButton")
+manualCookButton.Name = "ManualCookButton"
+manualCookButton.Size = UDim2.new(1, 0, 0, 45)
+manualCookButton.Position = UDim2.new(0, 0, 0, 60)
+manualCookButton.BackgroundColor3 = Color3.fromRGB(180, 140, 80)
+manualCookButton.BackgroundTransparency = 0.1
+manualCookButton.Text = "COOK ONCE (TEST)"
+manualCookButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+manualCookButton.Font = Enum.Font.GothamBold
+manualCookButton.TextSize = 14
+manualCookButton.Parent = breadContainer
+
+local manualCookCorner = Instance.new("UICorner")
+manualCookCorner.CornerRadius = UDim.new(0, 8)
+manualCookCorner.Parent = manualCookButton
+
+local manualCookStroke = Instance.new("UIStroke")
+manualCookStroke.Color = Color3.fromRGB(100, 80, 40)
+manualCookStroke.Thickness = 2
+manualCookStroke.Parent = manualCookButton
+
+-- Add hover effect to manual cook button
+manualCookButton.MouseEnter:Connect(function()
+    manualCookButton.BackgroundTransparency = 0
+end)
+
+manualCookButton.MouseLeave:Connect(function()
+    manualCookButton.BackgroundTransparency = 0.1
+end)
+
+-- Manual cook button click event
+manualCookButton.MouseButton1Click:Connect(function()
+    cookBread()
+end)
+
+-- Info label
+local breadInfoLabel = Instance.new("TextLabel")
+breadInfoLabel.Size = UDim2.new(1, 0, 0, 80)
+breadInfoLabel.Position = UDim2.new(0, 0, 0, 120)
+breadInfoLabel.BackgroundTransparency = 1
+breadInfoLabel.Text = "Process (Auto Loop):\n1. Activate nearby 'Take Dough' prompt\n2. Auto-equip dough\n3. Turn dough to bread (remote)\n4. Cook bread (remote)\n5. Loop every 0.5 seconds"
+breadInfoLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+breadInfoLabel.Font = Enum.Font.Gotham
+breadInfoLabel.TextSize = 11
+breadInfoLabel.TextXAlignment = Enum.TextXAlignment.Left
+breadInfoLabel.TextYAlignment = Enum.TextYAlignment.Top
+breadInfoLabel.Parent = breadContainer
+
+-- ... [Rest of the script remains the same, just removed the old auto-equip toggles]
 
 -- NPC Settings Section
 local npcSection = Instance.new("Frame")
@@ -1260,6 +1347,135 @@ local npcLayout = Instance.new("UIListLayout")
 npcLayout.Padding = UDim.new(0, 10)
 npcLayout.Parent = npcContainer
 
+-- Function to create number input with text box
+local function createNumberInput(label, min, max, default, callback)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, 0, 0, 70)
+    container.BackgroundTransparency = 1
+    
+    local labelText = Instance.new("TextLabel")
+    labelText.Size = UDim2.new(1, 0, 0, 20)
+    labelText.BackgroundTransparency = 1
+    labelText.Text = label
+    labelText.TextColor3 = Color3.fromRGB(200, 200, 200)
+    labelText.Font = Enum.Font.GothamMedium
+    labelText.TextSize = 13
+    labelText.TextXAlignment = Enum.TextXAlignment.Left
+    labelText.Parent = container
+    
+    local inputFrame = Instance.new("Frame")
+    inputFrame.Size = UDim2.new(1, 0, 0, 40)
+    inputFrame.Position = UDim2.new(0, 0, 0, 25)
+    inputFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+    inputFrame.BorderSizePixel = 0
+    inputFrame.Parent = container
+    
+    local inputCorner = Instance.new("UICorner")
+    inputCorner.CornerRadius = UDim.new(0, 8)
+    inputCorner.Parent = inputFrame
+    
+    local inputStroke = Instance.new("UIStroke")
+    inputStroke.Color = Color3.fromRGB(60, 60, 70)
+    inputStroke.Thickness = 2
+    inputStroke.Parent = inputFrame
+    
+    local textBox = Instance.new("TextBox")
+    textBox.Name = "ValueInput"
+    textBox.Size = UDim2.new(0.6, 0, 1, 0)
+    textBox.Position = UDim2.new(0.2, 0, 0, 0)
+    textBox.BackgroundTransparency = 1
+    textBox.Text = tostring(default)
+    textBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+    textBox.Font = Enum.Font.Gotham
+    textBox.TextSize = 14
+    textBox.TextXAlignment = Enum.TextXAlignment.Center
+    textBox.ClearTextOnFocus = false
+    textBox.Parent = inputFrame
+    
+    -- Increment/Decrement buttons
+    local minusButton = Instance.new("TextButton")
+    minusButton.Name = "MinusButton"
+    minusButton.Size = UDim2.new(0, 40, 1, 0)
+    minusButton.Position = UDim2.new(0, 0, 0, 0)
+    minusButton.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+    minusButton.BackgroundTransparency = 0.3
+    minusButton.Text = "-"
+    minusButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    minusButton.Font = Enum.Font.GothamBold
+    minusButton.TextSize = 18
+    minusButton.Parent = inputFrame
+    
+    local minusCorner = Instance.new("UICorner")
+    minusCorner.CornerRadius = UDim.new(0, 8)
+    minusCorner.Parent = minusButton
+    
+    local plusButton = Instance.new("TextButton")
+    plusButton.Name = "PlusButton"
+    plusButton.Size = UDim2.new(0, 40, 1, 0)
+    plusButton.Position = UDim2.new(1, -40, 0, 0)
+    plusButton.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+    plusButton.BackgroundTransparency = 0.3
+    plusButton.Text = "+"
+    plusButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    plusButton.Font = Enum.Font.GothamBold
+    plusButton.TextSize = 18
+    plusButton.Parent = inputFrame
+    
+    local plusCorner = Instance.new("UICorner")
+    plusCorner.CornerRadius = UDim.new(0, 8)
+    plusCorner.Parent = plusButton
+    
+    -- Function to validate and update value
+    local function updateValue(newValue)
+        local num = tonumber(newValue)
+        if num then
+            num = math.clamp(num, min, max)
+            textBox.Text = tostring(num)
+            callback(num)
+        else
+            textBox.Text = tostring(default)
+        end
+    end
+    
+    -- Text box events
+    textBox.FocusLost:Connect(function(enterPressed)
+        updateValue(textBox.Text)
+    end)
+    
+    -- Button events
+    minusButton.MouseButton1Click:Connect(function()
+        local current = tonumber(textBox.Text) or default
+        updateValue(current - 1)
+    end)
+    
+    plusButton.MouseButton1Click:Connect(function()
+        local current = tonumber(textBox.Text) or default
+        updateValue(current + 1)
+    end)
+    
+    return container
+end
+
+-- NPC Hitbox Size Input (CHANGED TO 1000)
+local npcInput = createNumberInput("Head Size (1-1000)", 1, 1000, _G.NPCHeadSize, function(value)
+    _G.NPCHeadSize = value
+end)
+npcInput.Parent = npcContainer
+
+-- NPC Detection Toggle
+local npcToggle, updateNPCToggle = createToggleButton("NPC Detection", _G.NPCEnabled, function(value)
+    _G.NPCEnabled = value
+end)
+npcToggle.Parent = npcContainer
+toggleUpdateFunctions["NPC Detection"] = updateNPCToggle
+
+-- Enable Hitboxes Toggle
+local masterToggle, updateMasterToggle = createToggleButton("Enable Hitboxes", not _G.Disabled, function(value)
+    _G.Disabled = not value
+end)
+masterToggle.Parent = npcContainer
+toggleUpdateFunctions["Enable Hitboxes"] = updateMasterToggle
+
 -- ESP Settings Section
 local espSection = Instance.new("Frame")
 espSection.Size = UDim2.new(1, 0, 0, 150)
@@ -1301,6 +1517,13 @@ espContainer.Parent = espSection
 local espLayout = Instance.new("UIListLayout")
 espLayout.Padding = UDim.new(0, 10)
 espLayout.Parent = espContainer
+
+-- ESP Toggle
+local espToggle, updateESPToggle = createToggleButton("NPC ESP", _G.ESPEnabled, function(value)
+    toggleESP(value)
+end)
+espToggle.Parent = espContainer
+toggleUpdateFunctions["NPC ESP"] = updateESPToggle
 
 -- Aimbot Settings Section
 local aimbotSection = Instance.new("Frame")
@@ -1344,6 +1567,208 @@ local aimbotLayout = Instance.new("UIListLayout")
 aimbotLayout.Padding = UDim.new(0, 15)
 aimbotLayout.Parent = aimbotContainer
 
+-- Aimbot Toggle
+local aimbotToggle, updateAimbotToggle = createToggleButton("Aimbot Enabled", _G.AimbotEnabled, function(value)
+    toggleAimbot(value)
+end)
+aimbotToggle.Parent = aimbotContainer
+toggleUpdateFunctions["Aimbot Enabled"] = updateAimbotToggle
+
+-- Aimbot Wall Check Toggle
+local wallCheckToggle, updateWallCheckToggle = createToggleButton("Wall Check", _G.AimbotWallCheck, function(value)
+    _G.AimbotWallCheck = value
+end)
+wallCheckToggle.Parent = aimbotContainer
+toggleUpdateFunctions["Wall Check"] = updateWallCheckToggle
+
+-- Aimbot Auto Shoot Toggle
+local autoShootToggle, updateAutoShootToggle = createToggleButton("Auto Shoot", _G.AimbotAutoShoot, function(value)
+    _G.AimbotAutoShoot = value
+end)
+autoShootToggle.Parent = aimbotContainer
+toggleUpdateFunctions["Auto Shoot"] = updateAutoShootToggle
+
+-- Show FOV Circle Toggle
+local showFOVToggle, updateFOVToggle = createToggleButton("Show FOV Circle", _G.AimbotShowFOV, function(value)
+    _G.AimbotShowFOV = value
+    updateFOVCircle()
+end)
+showFOVToggle.Parent = aimbotContainer
+toggleUpdateFunctions["Show FOV Circle"] = updateFOVToggle
+
+-- Aimbot Prediction Toggle
+local predictionToggle, updatePredictionToggle = createToggleButton("Movement Prediction", _G.AimbotPrediction, function(value)
+    _G.AimbotPrediction = value
+end)
+predictionToggle.Parent = aimbotContainer
+toggleUpdateFunctions["Movement Prediction"] = updatePredictionToggle
+
+-- Function to create dropdown for aimbot target part
+local function createAimbotDropdown(label, options, default, callback)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, 0, 0, 70)
+    container.BackgroundTransparency = 1
+    
+    local labelText = Instance.new("TextLabel")
+    labelText.Size = UDim2.new(1, 0, 0, 20)
+    labelText.BackgroundTransparency = 1
+    labelText.Text = label
+    labelText.TextColor3 = Color3.fromRGB(200, 200, 200)
+    labelText.Font = Enum.Font.GothamMedium
+    labelText.TextSize = 13
+    labelText.TextXAlignment = Enum.TextXAlignment.Left
+    labelText.Parent = container
+    
+    local dropdownFrame = Instance.new("Frame")
+    dropdownFrame.Size = UDim2.new(1, 0, 0, 40)
+    dropdownFrame.Position = UDim2.new(0, 0, 0, 25)
+    dropdownFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+    dropdownFrame.BorderSizePixel = 0
+    dropdownFrame.Parent = container
+    
+    local dropdownCorner = Instance.new("UICorner")
+    dropdownCorner.CornerRadius = UDim.new(0, 8)
+    dropdownCorner.Parent = dropdownFrame
+    
+    local dropdownStroke = Instance.new("UIStroke")
+    dropdownStroke.Color = Color3.fromRGB(60, 60, 70)
+    dropdownStroke.Thickness = 2
+    dropdownStroke.Parent = dropdownFrame
+    
+    local selectedText = Instance.new("TextLabel")
+    selectedText.Size = UDim2.new(0.8, 0, 1, 0)
+    selectedText.Position = UDim2.new(0.1, 0, 0, 0)
+    selectedText.BackgroundTransparency = 1
+    selectedText.Text = default
+    selectedText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    selectedText.Font = Enum.Font.Gotham
+    selectedText.TextSize = 14
+    selectedText.TextXAlignment = Enum.TextXAlignment.Left
+    selectedText.Parent = dropdownFrame
+    
+    local dropdownButton = Instance.new("TextButton")
+    dropdownButton.Size = UDim2.new(1, 0, 1, 0)
+    dropdownButton.BackgroundTransparency = 1
+    dropdownButton.Text = ""
+    dropdownButton.Parent = dropdownFrame
+    
+    local arrow = Instance.new("TextLabel")
+    arrow.Size = UDim2.new(0, 20, 0, 20)
+    arrow.Position = UDim2.new(1, -25, 0.5, -10)
+    arrow.BackgroundTransparency = 1
+    arrow.Text = "▼"
+    arrow.TextColor3 = Color3.fromRGB(180, 180, 180)
+    arrow.Font = Enum.Font.Gotham
+    arrow.TextSize = 12
+    arrow.Parent = dropdownFrame
+    
+    -- Dropdown options
+    local optionsFrame = Instance.new("Frame")
+    optionsFrame.Size = UDim2.new(1, 0, 0, 80)
+    optionsFrame.Position = UDim2.new(0, 0, 1, 5)
+    optionsFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+    optionsFrame.BorderSizePixel = 0
+    optionsFrame.Visible = false
+    optionsFrame.ZIndex = 10
+    optionsFrame.Parent = dropdownFrame
+    
+    local optionsCorner = Instance.new("UICorner")
+    optionsCorner.CornerRadius = UDim.new(0, 8)
+    optionsCorner.Parent = optionsFrame
+    
+    local optionsStroke = Instance.new("UIStroke")
+    optionsStroke.Color = Color3.fromRGB(60, 60, 70)
+    optionsStroke.Thickness = 2
+    optionsStroke.Parent = optionsFrame
+    
+    local optionsLayout = Instance.new("UIListLayout")
+    optionsLayout.Padding = UDim.new(0, 2)
+    optionsLayout.Parent = optionsFrame
+    
+    -- Create option buttons
+    for _, option in ipairs(options) do
+        local optionButton = Instance.new("TextButton")
+        optionButton.Size = UDim2.new(1, -10, 0, 25)
+        optionButton.Position = UDim2.new(0, 5, 0, 0)
+        optionButton.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+        optionButton.Text = option
+        optionButton.TextColor3 = Color3.fromRGB(220, 220, 220)
+        optionButton.Font = Enum.Font.Gotham
+        optionButton.TextSize = 12
+        optionButton.AutoButtonColor = false
+        optionButton.Parent = optionsFrame
+        
+        local optionCorner = Instance.new("UICorner")
+        optionCorner.CornerRadius = UDim.new(0, 4)
+        optionCorner.Parent = optionButton
+        
+        optionButton.MouseEnter:Connect(function()
+            optionButton.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+        end)
+        
+        optionButton.MouseLeave:Connect(function()
+            optionButton.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+        end)
+        
+        optionButton.MouseButton1Click:Connect(function()
+            selectedText.Text = option
+            callback(option)
+            optionsFrame.Visible = false
+        end)
+    end
+    
+    dropdownButton.MouseButton1Click:Connect(function()
+        optionsFrame.Visible = not optionsFrame.Visible
+    end)
+    
+    -- Close dropdown when clicking elsewhere
+    UserInputService.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            local mousePos = UserInputService:GetMouseLocation()
+            local framePos = dropdownFrame.AbsolutePosition
+            local frameSize = dropdownFrame.AbsoluteSize
+            
+            if mousePos.X < framePos.X or mousePos.X > framePos.X + frameSize.X or
+               mousePos.Y < framePos.Y or mousePos.Y > framePos.Y + frameSize.Y + (optionsFrame.Visible and 85 or 0) then
+                optionsFrame.Visible = false
+            end
+        end
+    end)
+    
+    return container
+end
+
+-- Aimbot Target Part Dropdown
+local aimbotDropdown = createAimbotDropdown("Aimbot Target", {"Head", "Torso"}, _G.AimbotTargetPart, function(value)
+    _G.AimbotTargetPart = value
+end)
+aimbotDropdown.Parent = aimbotContainer
+
+-- Aimbot FOV Input
+local aimbotFOVInput = createNumberInput("Aimbot FOV (10-360)", 10, 360, _G.AimbotFOV, function(value)
+    _G.AimbotFOV = value
+    updateFOVCircle()
+end)
+aimbotFOVInput.Parent = aimbotContainer
+
+-- Aimbot Smoothness Input
+local aimbotSmoothInput = createNumberInput("Aimbot Smoothness (0.1-0.9)", 0.1, 0.9, _G.AimbotSmoothness, function(value)
+    _G.AimbotSmoothness = value
+end)
+aimbotSmoothInput.Parent = aimbotContainer
+
+-- Aimbot Prediction Strength Input
+local predictionStrengthInput = createNumberInput("Prediction Strength (0-1)", 0, 1, _G.AimbotPredictionStrength, function(value)
+    _G.AimbotPredictionStrength = value
+end)
+predictionStrengthInput.Parent = aimbotContainer
+
+-- Aimbot Max Distance Input
+local aimbotDistanceInput = createNumberInput("Max Distance (10-2000)", 10, 2000, _G.AimbotMaxDistance, function(value)
+    _G.AimbotMaxDistance = value
+end)
+aimbotDistanceInput.Parent = aimbotContainer
+
 -- Instant Interact Section
 local interactSection = Instance.new("Frame")
 interactSection.Size = UDim2.new(1, 0, 0, 150)
@@ -1386,6 +1811,13 @@ local interactLayout = Instance.new("UIListLayout")
 interactLayout.Padding = UDim.new(0, 10)
 interactLayout.Parent = interactContainer
 
+-- Instant Interact Toggle
+local interactToggle, updateInteractToggle = createToggleButton("Instant Interact", _G.InstantInteractEnabled, function(value)
+    toggleInstantInteract(value)
+end)
+interactToggle.Parent = interactContainer
+toggleUpdateFunctions["Instant Interact"] = updateInteractToggle
+
 -- Performance Settings Section
 local perfSection = Instance.new("Frame")
 perfSection.Size = UDim2.new(1, 0, 0, 170)
@@ -1427,6 +1859,18 @@ perfContainer.Parent = perfSection
 local perfLayout = Instance.new("UIListLayout")
 perfLayout.Padding = UDim.new(0, 10)
 perfLayout.Parent = perfContainer
+
+-- Performance: ESP Update Rate
+local espRateInput = createNumberInput("ESP Update Rate (0.05-1)", 0.05, 1, _G.ESPUpdateRate, function(value)
+    _G.ESPUpdateRate = value
+end)
+espRateInput.Parent = perfContainer
+
+-- Performance: Aimbot Update Rate
+local aimbotRateInput = createNumberInput("Aimbot Update Rate (0.01-0.1)", 0.01, 0.1, _G.AimbotUpdateRate, function(value)
+    _G.AimbotUpdateRate = value
+end)
+aimbotRateInput.Parent = perfContainer
 
 -- Info Section
 local infoSection = Instance.new("Frame")
@@ -1506,120 +1950,6 @@ resetButtonStroke.Color = Color3.fromRGB(100, 30, 30)
 resetButtonStroke.Thickness = 2
 resetButtonStroke.Parent = resetButton
 
--- ========== CONTROLS ==========
--- NPC Hitbox Size Input
-local npcInput = createNumberInput("Head Size (1-50)", 1, 50, _G.NPCHeadSize, function(value)
-    _G.NPCHeadSize = value
-end)
-npcInput.Parent = npcContainer
-
--- NPC Detection Toggle
-local npcToggle, updateNPCToggle = createToggleButton("NPC Detection", _G.NPCEnabled, function(value)
-    _G.NPCEnabled = value
-end)
-npcToggle.Parent = npcContainer
-toggleUpdateFunctions["NPC Detection"] = updateNPCToggle
-
--- Enable Hitboxes Toggle
-local masterToggle, updateMasterToggle = createToggleButton("Enable Hitboxes", not _G.Disabled, function(value)
-    _G.Disabled = not value
-end)
-masterToggle.Parent = npcContainer
-toggleUpdateFunctions["Enable Hitboxes"] = updateMasterToggle
-
--- ESP Toggle
-local espToggle, updateESPToggle = createToggleButton("NPC ESP", _G.ESPEnabled, function(value)
-    toggleESP(value)
-end)
-espToggle.Parent = espContainer
-toggleUpdateFunctions["NPC ESP"] = updateESPToggle
-
--- Aimbot Toggle
-local aimbotToggle, updateAimbotToggle = createToggleButton("Aimbot Enabled", _G.AimbotEnabled, function(value)
-    toggleAimbot(value)
-end)
-aimbotToggle.Parent = aimbotContainer
-toggleUpdateFunctions["Aimbot Enabled"] = updateAimbotToggle
-
--- Aimbot Wall Check Toggle
-local wallCheckToggle, updateWallCheckToggle = createToggleButton("Wall Check", _G.AimbotWallCheck, function(value)
-    _G.AimbotWallCheck = value
-end)
-wallCheckToggle.Parent = aimbotContainer
-toggleUpdateFunctions["Wall Check"] = updateWallCheckToggle
-
--- Aimbot Auto Shoot Toggle
-local autoShootToggle, updateAutoShootToggle = createToggleButton("Auto Shoot", _G.AimbotAutoShoot, function(value)
-    _G.AimbotAutoShoot = value
-end)
-autoShootToggle.Parent = aimbotContainer
-toggleUpdateFunctions["Auto Shoot"] = updateAutoShootToggle
-
--- Show FOV Circle Toggle
-local showFOVToggle, updateFOVToggle = createToggleButton("Show FOV Circle", _G.AimbotShowFOV, function(value)
-    _G.AimbotShowFOV = value
-    updateFOVCircle()
-end)
-showFOVToggle.Parent = aimbotContainer
-toggleUpdateFunctions["Show FOV Circle"] = updateFOVToggle
-
--- Aimbot Prediction Toggle
-local predictionToggle, updatePredictionToggle = createToggleButton("Movement Prediction", _G.AimbotPrediction, function(value)
-    _G.AimbotPrediction = value
-end)
-predictionToggle.Parent = aimbotContainer
-toggleUpdateFunctions["Movement Prediction"] = updatePredictionToggle
-
--- Aimbot Target Part Dropdown
-local aimbotDropdown = createAimbotDropdown("Aimbot Target", {"Head", "Torso"}, _G.AimbotTargetPart, function(value)
-    _G.AimbotTargetPart = value
-end)
-aimbotDropdown.Parent = aimbotContainer
-
--- Aimbot FOV Input
-local aimbotFOVInput = createNumberInput("Aimbot FOV (10-360)", 10, 360, _G.AimbotFOV, function(value)
-    _G.AimbotFOV = value
-    updateFOVCircle()
-end)
-aimbotFOVInput.Parent = aimbotContainer
-
--- Aimbot Smoothness Input
-local aimbotSmoothInput = createNumberInput("Aimbot Smoothness (0.1-0.9)", 0.1, 0.9, _G.AimbotSmoothness, function(value)
-    _G.AimbotSmoothness = value
-end)
-aimbotSmoothInput.Parent = aimbotContainer
-
--- Aimbot Prediction Strength Input
-local predictionStrengthInput = createNumberInput("Prediction Strength (0-1)", 0, 1, _G.AimbotPredictionStrength, function(value)
-    _G.AimbotPredictionStrength = value
-end)
-predictionStrengthInput.Parent = aimbotContainer
-
--- Aimbot Max Distance Input
-local aimbotDistanceInput = createNumberInput("Max Distance (10-2000)", 10, 2000, _G.AimbotMaxDistance, function(value)
-    _G.AimbotMaxDistance = value
-end)
-aimbotDistanceInput.Parent = aimbotContainer
-
--- Performance: ESP Update Rate
-local espRateInput = createNumberInput("ESP Update Rate (0.05-1)", 0.05, 1, _G.ESPUpdateRate, function(value)
-    _G.ESPUpdateRate = value
-end)
-espRateInput.Parent = perfContainer
-
--- Performance: Aimbot Update Rate
-local aimbotRateInput = createNumberInput("Aimbot Update Rate (0.01-0.1)", 0.01, 0.1, _G.AimbotUpdateRate, function(value)
-    _G.AimbotUpdateRate = value
-end)
-aimbotRateInput.Parent = perfContainer
-
--- Instant Interact Toggle
-local interactToggle, updateInteractToggle = createToggleButton("Instant Interact", _G.InstantInteractEnabled, function(value)
-    toggleInstantInteract(value)
-end)
-interactToggle.Parent = interactContainer
-toggleUpdateFunctions["Instant Interact"] = updateInteractToggle
-
 resetButton.MouseButton1Click:Connect(function()
     _G.NPCHeadSize = 20
     _G.Disabled = false
@@ -1638,6 +1968,7 @@ resetButton.MouseButton1Click:Connect(function()
     _G.AimbotPredictionStrength = 0.3
     _G.ESPUpdateRate = 0.1
     _G.AimbotUpdateRate = 0.03
+    _G.AutoCookEnabled = false
     
     -- Update number inputs
     local npcTextBox = npcInput:FindFirstChild("ValueInput", true)
@@ -1653,11 +1984,13 @@ resetButton.MouseButton1Click:Connect(function()
     if toggleUpdateFunctions["Auto Shoot"] then toggleUpdateFunctions["Auto Shoot"](false) end
     if toggleUpdateFunctions["Show FOV Circle"] then toggleUpdateFunctions["Show FOV Circle"](false) end
     if toggleUpdateFunctions["Movement Prediction"] then toggleUpdateFunctions["Movement Prediction"](true) end
+    if toggleUpdateFunctions["Auto Cook Bread (Full Process)"] then toggleUpdateFunctions["Auto Cook Bread (Full Process)"](false) end
     
     -- Apply changes
     toggleESP(false)
     toggleInstantInteract(false)
     toggleAimbot(false)
+    toggleAutoCook(false)
     updateFOVCircle()
     
     print("Settings reset to defaults!")
@@ -1797,20 +2130,21 @@ game:GetService("Players").PlayerRemoving:Connect(function(player)
         if aimbotConnection then
             aimbotConnection:Disconnect()
         end
+        if autoCookConnection then
+            autoCookConnection:Disconnect()
+        end
         ScreenGui:Destroy()
     end
 end)
 
 -- Initialize
-print("Enhanced Aimbot Config Loaded!")
-print("Features: Movement Prediction, Better Wall Check, Faster Tracking")
+print("Whizzbang Loaded!")
+print("Features: Class Selection, Auto Bread Cooking, Enhanced Aimbot, Movement Prediction")
 print("Press INSERT to toggle GUI")
 print("Press RightShift to toggle all features")
-print("\nEnhanced Aimbot Features:")
-print("- Movement prediction for moving enemies")
-print("- Better wall check (checks multiple hit points)")
-print("- Dynamic smoothness adjustment")
-print("- Faster update rate (0.03 seconds)")
-print("- Target velocity tracking")
-print("- Prediction strength control")
-print("- Ignores NPCs with 'prop' in name")
+print("\nClass Selection Available:")
+print("- Medic, Engineer, Rifleman, Officer, Machine Gun")
+print("\nBread Cooking Features:")
+print("- Single Auto Cook Button: Activates full process loop")
+print("- Process: Activate prompt → Equip dough → Cook → Loop")
+print("- Manual Cook: Test the process once")
