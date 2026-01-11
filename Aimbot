@@ -20,6 +20,9 @@ _G.AimbotAutoShoot = false
 _G.AimbotMaxDistance = 500
 _G.AutoCookBread = false
 _G.AutoCookDelay = 0.3
+-- NEW: Auto Throw Grenade Settings
+_G.AutoThrowGrenade = false
+_G.AutoThrowDelay = 0.1  -- Changed to 0.1 for faster throwing
 
 -- Variables
 local LocalPlayer = Players.LocalPlayer
@@ -30,6 +33,8 @@ local HeadScaleInstances = {}
 local currentTarget = nil
 local isRunning = false
 local cooking = false
+local throwingGrenade = false
+local lastThrowTime = 0
 
 -- Create ScreenGui
 local ScreenGui = Instance.new("ScreenGui")
@@ -76,7 +81,7 @@ local function scaleNPCHead(npc, scaleMultiplier)
     
     -- Apply scaling
     local data = HeadScaleInstances[npc]
-    local scaleValue = scaleMultiplier / 20  -- Reduced for more reasonable scaling
+    local scaleValue = scaleMultiplier / 20
     if scaleValue < 1.5 then scaleValue = 1.5 end
     
     if data.Mesh and data.Mesh.Parent == head then
@@ -211,7 +216,69 @@ local function updateESP()
     end
 end
 
--- Simple Aimbot
+-- Get closest NPC for grenade throwing (360 degree, no distance limit)
+local function getClosestNPCForGrenade()
+    local closest = nil
+    local closestDistance = math.huge
+    local character = LocalPlayer.Character
+    if not character then return nil end
+    
+    local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+    if not humanoidRootPart then return nil end
+    
+    local myPosition = humanoidRootPart.Position
+    
+    for npc, _ in pairs(TrackedNPCs) do
+        if npc and npc.Parent then
+            local humanoid = npc:FindFirstChildOfClass("Humanoid")
+            local head = npc:FindFirstChild("Head")
+            
+            if humanoid and humanoid.Health > 0 and head then
+                local distance = (head.Position - myPosition).Magnitude
+                
+                if distance < closestDistance then
+                    closestDistance = distance
+                    closest = npc
+                end
+            end
+        end
+    end
+    
+    return closest
+end
+
+-- Clean inventory for auto-throw (keep only "mill" items)
+local function cleanInventoryForThrow()
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    -- Clean backpack
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    if backpack then
+        for _, item in ipairs(backpack:GetChildren()) do
+            if item:IsA("Tool") then
+                -- Keep only "mill" items (case-insensitive)
+                local itemName = item.Name:lower()
+                if itemName ~= "mill" then
+                    item:Destroy()
+                end
+            end
+        end
+    end
+    
+    -- Clean character tools
+    for _, item in ipairs(character:GetChildren()) do
+        if item:IsA("Tool") then
+            -- Keep only "mill" items (case-insensitive)
+            local itemName = item.Name:lower()
+            if itemName ~= "mill" then
+                item:Destroy()
+            end
+        end
+    end
+end
+
+-- Simple Aimbot (for shooting)
 local function getClosestNPC()
     local closest = nil
     local closestDistance = math.huge
@@ -254,6 +321,113 @@ local function smoothAim(targetPosition)
     
     local newLook = currentLook:Lerp(lookVector, _G.AimbotSmoothness)
     Camera.CFrame = CFrame.new(currentPos, currentPos + newLook)
+end
+
+-- Auto Throw Grenade Function (UPDATED)
+local function autoThrowGrenade()
+    if not _G.AutoThrowGrenade then return end
+    if throwingGrenade then return end
+    
+    local currentTime = tick()
+    if currentTime - lastThrowTime < _G.AutoThrowDelay then return end
+    
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then return end
+    
+    -- Get closest enemy for grenade throwing
+    local targetNPC = getClosestNPCForGrenade()
+    if not targetNPC then return end
+    
+    local targetHead = targetNPC:FindFirstChild("Head")
+    if not targetHead then return end
+    
+    throwingGrenade = true
+    
+    -- Step 1: Clean inventory (keep only "mill" items)
+    cleanInventoryForThrow()
+    
+    -- Step 2: Try to get grenades from riflemen remote
+    pcall(function()
+        local remotePath = ReplicatedStorage:WaitForChild("RemoteEvents"):WaitForChild("Player"):WaitForChild("ChooseClass")
+        -- Fire riflemen class remote to get grenades
+        remotePath:FireServer("rifle", "rifleman")
+    end)
+    
+    wait(0.05) -- Reduced wait for faster throwing
+    
+    -- Step 3: Look for "mill" item (grenade) in inventory
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    local grenadeTool = nil
+    
+    -- Check backpack first
+    if backpack then
+        for _, item in ipairs(backpack:GetChildren()) do
+            if item:IsA("Tool") and item.Name:lower() == "mill" then
+                grenadeTool = item
+                break
+            end
+        end
+    end
+    
+    -- Check character
+    if not grenadeTool then
+        for _, item in ipairs(character:GetChildren()) do
+            if item:IsA("Tool") and item.Name:lower() == "mill" then
+                grenadeTool = item
+                break
+            end
+        end
+    end
+    
+    if grenadeTool then
+        -- Equip the grenade (faster)
+        humanoid:EquipTool(grenadeTool)
+        
+        -- Face the target with improved aiming
+        local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+        if humanoidRootPart then
+            -- Aim slightly above the head for better throwing arc
+            local targetPosition = targetHead.Position + Vector3.new(0, 5, 0) -- 5 studs above head
+            humanoidRootPart.CFrame = CFrame.new(humanoidRootPart.Position, Vector3.new(targetPosition.X, humanoidRootPart.Position.Y, targetPosition.Z))
+        end
+        
+        -- Very short wait before throwing
+        wait(0.05)
+        
+        -- Simulate clicking the grenade tool (use it)
+        grenadeTool:Activate()
+        
+        -- Short wait after throwing
+        wait(0.05)
+        
+        print("Threw grenade at enemy: " .. targetNPC.Name)
+        lastThrowTime = currentTime
+    else
+        -- If no grenade found, try to get one directly
+        pcall(function()
+            -- Try alternative grenade remote if exists
+            local grenadeRemote = ReplicatedStorage:FindFirstChild("RemoteEvents"):FindFirstChild("GetGrenade")
+            if grenadeRemote then
+                grenadeRemote:FireServer()
+            end
+        end)
+        print("No 'mill' grenade found, requesting more...")
+    end
+    
+    throwingGrenade = false
+end
+
+-- Start auto throw grenade loop
+local function startAutoThrow()
+    spawn(function()
+        while _G.AutoThrowGrenade do
+            autoThrowGrenade()
+            wait(0.05) -- Faster checking for continuous throwing
+        end
+    end)
 end
 
 -- Main Game Loop
@@ -360,7 +534,130 @@ local function startAutoCook()
     end)
 end
 
--- Class Selection
+-- Class Selection with Inventory Management
+local function cleanupInventory(keepItemName)
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    -- 1. Clear backpack
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    if backpack then
+        for _, item in ipairs(backpack:GetChildren()) do
+            if item:IsA("Tool") then
+                -- Keep only the specified item (case-insensitive)
+                local itemName = item.Name:lower()
+                local keepName = keepItemName:lower()
+                if itemName ~= keepName then
+                    item:Destroy()
+                    print("Deleted item from backpack: " .. item.Name)
+                else
+                    print("Kept item in backpack: " .. item.Name)
+                end
+            end
+        end
+    end
+    
+    -- 2. Clear character tools
+    for _, item in ipairs(character:GetChildren()) do
+        if item:IsA("Tool") then
+            -- Keep only the specified item (case-insensitive)
+            local itemName = item.Name:lower()
+            local keepName = keepItemName:lower()
+            if itemName ~= keepName then
+                item:Destroy()
+                print("Deleted item from character: " .. item.Name)
+            else
+                print("Kept item in character: " .. item.Name)
+            end
+        end
+    end
+    
+    -- 3. Check if we have the keep item, if not, try to find and give it
+    local hasKeepItem = false
+    
+    -- Check backpack
+    if backpack then
+        for _, item in ipairs(backpack:GetChildren()) do
+            if item:IsA("Tool") and item.Name:lower() == keepItemName:lower() then
+                hasKeepItem = true
+                break
+            end
+        end
+    end
+    
+    -- Check character
+    if not hasKeepItem then
+        for _, item in ipairs(character:GetChildren()) do
+            if item:IsA("Tool") and item.Name:lower() == keepItemName:lower() then
+                hasKeepItem = true
+                break
+            end
+        end
+    end
+    
+    -- If no keep item found, try to find it
+    if not hasKeepItem then
+        print("No '" .. keepItemName .. "' item found, searching...")
+        
+        local itemTemplate = nil
+        
+        -- Search in common locations
+        local function searchInFolder(folder)
+            if not folder then return nil end
+            for _, item in ipairs(folder:GetChildren()) do
+                if item:IsA("Tool") and item.Name:lower() == keepItemName:lower() then
+                    return item
+                end
+            end
+            return nil
+        end
+        
+        -- Check ReplicatedStorage
+        itemTemplate = searchInFolder(ReplicatedStorage:FindFirstChild("Tools"))
+        if not itemTemplate then
+            itemTemplate = searchInFolder(ReplicatedStorage:FindFirstChild("Weapons"))
+        end
+        if not itemTemplate then
+            itemTemplate = searchInFolder(ReplicatedStorage:FindFirstChild("Items"))
+        end
+        
+        -- Check ServerStorage
+        if not itemTemplate then
+            local ServerStorage = game:GetService("ServerStorage")
+            itemTemplate = searchInFolder(ServerStorage:FindFirstChild("Tools"))
+            if not itemTemplate then
+                itemTemplate = searchInFolder(ServerStorage:FindFirstChild("Weapons"))
+            end
+            if not itemTemplate then
+                itemTemplate = searchInFolder(ServerStorage:FindFirstChild("Items"))
+            end
+        end
+        
+        -- If found, clone it
+        if itemTemplate then
+            local clonedItem = itemTemplate:Clone()
+            clonedItem.Parent = backpack or character
+            print("Found and gave '" .. keepItemName .. "' item from template")
+        else
+            -- Create a basic tool
+            local newTool = Instance.new("Tool")
+            newTool.Name = keepItemName
+            newTool.ToolTip = keepItemName .. " Tool"
+            
+            -- Add a handle
+            local handle = Instance.new("Part")
+            handle.Name = "Handle"
+            handle.Size = Vector3.new(0.5, 0.5, 2)
+            handle.Parent = newTool
+            
+            newTool.Parent = backpack or character
+            print("Created default '" .. keepItemName .. "' tool")
+        end
+    else
+        print("Inventory cleaned. Keeping only '" .. keepItemName .. "' item.")
+    end
+end
+
 local function selectClass(classType)
     pcall(function()
         local remotePath = ReplicatedStorage:WaitForChild("RemoteEvents"):WaitForChild("Player"):WaitForChild("ChooseClass")
@@ -378,7 +675,49 @@ local function selectClass(classType)
             args = {"auto", "automatic"}
         end
         
+        -- Fire the original remote to select class
         remotePath:FireServer(unpack(args))
+        
+        -- Wait a moment for the game to give items
+        wait(0.5)
+        
+        -- Clean inventory based on class
+        if classType == "rifleman" then
+            cleanupInventory("mill")
+        elseif classType == "engineer" then
+            cleanupInventory("wire spool")
+        end
+        
+        -- Set up cleanup for respawns (60 seconds)
+        local cleanupTimer = 60
+        local respawnConnection
+        
+        local function setupRespawnCleanup()
+            if respawnConnection then
+                respawnConnection:Disconnect()
+            end
+            
+            respawnConnection = LocalPlayer.CharacterAdded:Connect(function(newCharacter)
+                wait(1) -- Wait for game to give default items
+                if classType == "rifleman" then
+                    cleanupInventory("mill")
+                elseif classType == "engineer" then
+                    cleanupInventory("wire spool")
+                end
+            end)
+        end
+        
+        setupRespawnCleanup()
+        
+        -- Disconnect after 60 seconds
+        delay(cleanupTimer, function()
+            if respawnConnection then
+                respawnConnection:Disconnect()
+                print("Stopped auto-cleaning inventory for " .. classType)
+            end
+        end)
+        
+        print(classType:upper() .. " class selected. All items except the class-specific item will be removed.")
     end)
 end
 
@@ -466,11 +805,11 @@ local function createNumberInput(label, min, max, default, callback)
     return container
 end
 
--- Main GUI Frame
+-- Main GUI Frame (Increased height to fit new button)
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 320, 0, 500)
-MainFrame.Position = UDim2.new(1, -340, 0.5, -250)
+MainFrame.Size = UDim2.new(0, 320, 0, 530) -- Increased from 500 to 530
+MainFrame.Position = UDim2.new(1, -340, 0.5, -265) -- Adjusted position for new height
 MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 MainFrame.BackgroundTransparency = 0.05
 MainFrame.BorderSizePixel = 0
@@ -630,6 +969,22 @@ end)
 espToggle.Parent = ScrollFrame
 toggleUpdateFunctions["Mini Health ESP"] = updateESPToggle
 
+-- Auto Throw Grenade Toggle (NEW)
+local autoThrowToggle, updateAutoThrowToggle = createToggleButton("Auto Throw Grenade", _G.AutoThrowGrenade, function(value)
+    _G.AutoThrowGrenade = value
+    if value then
+        startAutoThrow()
+    end
+end)
+autoThrowToggle.Parent = ScrollFrame
+toggleUpdateFunctions["Auto Throw Grenade"] = updateAutoThrowToggle
+
+-- Auto Throw Delay Input (NEW)
+local autoThrowDelayInput = createNumberInput("Grenade Throw Delay (0.05-1s)", 0.05, 1, _G.AutoThrowDelay, function(value)
+    _G.AutoThrowDelay = value
+end)
+autoThrowDelayInput.Parent = ScrollFrame
+
 -- Aimbot FOV Input
 local aimbotFOVInput = createNumberInput("Aimbot FOV (20-360)", 20, 360, _G.AimbotFOV, function(value)
     _G.AimbotFOV = value
@@ -725,12 +1080,15 @@ resetButton.MouseButton1Click:Connect(function()
     _G.AimbotMaxDistance = 500
     _G.AutoCookBread = false
     _G.AutoCookDelay = 0.3
+    _G.AutoThrowGrenade = false  -- NEW: Reset auto throw
+    _G.AutoThrowDelay = 0.1      -- NEW: Reset throw delay (changed to 0.1)
     
     -- Reset GUI toggles
     if toggleUpdateFunctions["Enable Features"] then toggleUpdateFunctions["Enable Features"](true) end
     if toggleUpdateFunctions["NPC Detection"] then toggleUpdateFunctions["NPC Detection"](true) end
     if toggleUpdateFunctions["Hitbox All Enemies"] then toggleUpdateFunctions["Hitbox All Enemies"](false) end
     if toggleUpdateFunctions["Mini Health ESP"] then toggleUpdateFunctions["Mini Health ESP"](false) end
+    if toggleUpdateFunctions["Auto Throw Grenade"] then toggleUpdateFunctions["Auto Throw Grenade"](false) end  -- NEW
     if toggleUpdateFunctions["Aimbot"] then toggleUpdateFunctions["Aimbot"](false) end
     if toggleUpdateFunctions["Wall Check"] then toggleUpdateFunctions["Wall Check"](false) end
     if toggleUpdateFunctions["Auto Shoot"] then toggleUpdateFunctions["Auto Shoot"](false) end
@@ -744,6 +1102,7 @@ resetButton.MouseButton1Click:Connect(function()
     ESPInstances = {}
     TrackedNPCs = {}
     cooking = false
+    throwingGrenade = false
 end)
 
 -- Update scroll frame size
@@ -809,7 +1168,7 @@ isRunning = true
 spawn(function()
     while isRunning do
         mainLoop()
-        wait(0.03)  -- Consistent 30 FPS update rate
+        wait(0.03)
     end
 end)
 
@@ -823,13 +1182,23 @@ game:GetService("Players").PlayerRemoving:Connect(function(player)
 end)
 
 print("==========================================")
-print("Whizzbang Script - STABLE VERSION")
+print("Whizzbang Script - UPDATED AUTO GRENADE THROWING")
 print("==========================================")
 print("Press INSERT to open/close GUI")
+print("Enhanced Auto Throw Grenade Features:")
+print("1. Cleans inventory automatically (keeps only 'mill' grenades)")
+print("2. Improved aiming: Throws 5 studs above enemy head for better arc")
+print("3. Faster throwing: 0.1s equip/throw delay for instant spamming")
+print("4. Continuous loop: Get grenade → Throw → Clean → Repeat")
+print("==========================================")
+print("Class-Specific Inventory Management:")
+print("- Rifleman: Keeps ONLY 'mill' item (grenades)")
+print("- Engineer: Keeps ONLY 'wire spool' item")
+print("- Other classes: No inventory cleanup")
+print("==========================================")
 print("Features:")
-print("- Consistent ESP and Aimbot loop (30 FPS)")
 print("- Mini Health ESP (40x12 pixels)")
-print("- Hitbox All Enemies toggle works")
+print("- Hitbox All Enemies toggle")
 print("- Auto Cook with 0.3s delay")
-print("- Simple and reliable")
+print("- Aimbot with FOV, smoothness, and distance controls")
 print("==========================================")
