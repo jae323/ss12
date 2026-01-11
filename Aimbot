@@ -2,1163 +2,544 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
-local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 
 -- Settings
-_G.NPCHeadSize = 20
+_G.NPCHeadSize = 100
 _G.Disabled = false
 _G.NPCEnabled = true
 _G.ESPEnabled = false
-_G.InstantInteractEnabled = false
-_G.ShowProgressBars = true
 _G.AimbotEnabled = false
-_G.AimbotTargetPart = "Head" -- "Head" or "Torso"
-_G.AimbotFOV = 100 -- Field of view for aimbot
-_G.AimbotSmoothness = 0.2 -- Lower = faster tracking (0 = instant, 1 = slow)
-_G.AimbotWallCheck = true -- Wall/visibility check
-_G.AimbotAutoShoot = false -- Auto shoot when target is locked
-_G.AimbotMaxDistance = 500 -- Maximum distance for aimbot
-_G.AimbotShowFOV = false -- Show FOV circle (can cause lag)
-_G.AimbotPrediction = true -- Predict enemy movement
-_G.AimbotPredictionStrength = 0.3 -- How much to lead shots (0-1)
-_G.ESPUpdateRate = 0.1 -- ESP update rate in seconds (higher = less lag)
-_G.AimbotUpdateRate = 0.03 -- Lower = better tracking for moving enemies
-_G.AutoCookEnabled = false -- SINGLE Auto Cook toggle
+_G.HitboxAllEnabled = false
+_G.AimbotFOV = 100
+_G.AimbotSmoothness = 0.3
+_G.AimbotWallCheck = false
+_G.AimbotAutoShoot = false
+_G.AimbotMaxDistance = 500
+_G.AutoCookBread = false
+_G.AutoCookDelay = 0.3
 
--- Storage
-local TrackedNPCs = {}
-local NPCESPInstances = {}
+-- Variables
 local LocalPlayer = Players.LocalPlayer
-local Camera = workspace.CurrentCamera
-local lastESPUpdate = 0
-local lastAimbotUpdate = 0
+local Camera = Workspace.CurrentCamera
+local TrackedNPCs = {}
+local ESPInstances = {}
+local HeadScaleInstances = {}
+local currentTarget = nil
+local isRunning = false
+local cooking = false
 
--- Store previous positions for prediction
-local enemyVelocity = {}
-local enemyLastPositions = {}
-local enemyLastUpdate = {}
-
--- Bread cooking variables
-local autoCookConnection = nil
-local lastCookTime = 0
-
--- GUI State
-local GUIVisible = false
-
--- Create Modern GUI
+-- Create ScreenGui
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "HitboxConfigGUI"
+ScreenGui.Name = "WhizzbangGUI"
 ScreenGui.Parent = CoreGui
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
--- FOV Circle (Visual Indicator)
-local FOVCircle = Instance.new("Frame")
-FOVCircle.Name = "FOVCircle"
-FOVCircle.BackgroundTransparency = 1
-FOVCircle.Size = UDim2.new(0, 200, 0, 200)
-FOVCircle.Position = UDim2.new(0.5, -100, 0.5, -100)
-FOVCircle.Visible = false
-FOVCircle.Parent = ScreenGui
-
-local CircleOutline = Instance.new("UIStroke")
-CircleOutline.Color = Color3.fromRGB(255, 50, 50)
-CircleOutline.Thickness = 2
-CircleOutline.Transparency = 0.7
-CircleOutline.Parent = FOVCircle
-
-local CircleCorner = Instance.new("UICorner")
-CircleCorner.CornerRadius = UDim.new(1, 0)
-CircleCorner.Parent = FOVCircle
-
--- Top Right Toggle Button
-local ToggleButton = Instance.new("TextButton")
-ToggleButton.Name = "ToggleButton"
-ToggleButton.Size = UDim2.new(0, 40, 0, 40)
-ToggleButton.Position = UDim2.new(1, -50, 0, 10)
-ToggleButton.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-ToggleButton.BackgroundTransparency = 0.1
-ToggleButton.BorderSizePixel = 0
-ToggleButton.Text = "⚙"
-ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-ToggleButton.Font = Enum.Font.GothamBold
-ToggleButton.TextSize = 20
-ToggleButton.ZIndex = 100
-ToggleButton.Visible = true
-ToggleButton.Parent = ScreenGui
-
-local ButtonCorner = Instance.new("UICorner")
-ButtonCorner.CornerRadius = UDim.new(0, 6)
-ButtonCorner.Parent = ToggleButton
-
-local ButtonStroke = Instance.new("UIStroke")
-ButtonStroke.Color = Color3.fromRGB(80, 80, 90)
-ButtonStroke.Thickness = 2
-ButtonStroke.Parent = ToggleButton
-
--- Main Frame
-local MainFrame = Instance.new("Frame")
-MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 400, 0, 600)
-MainFrame.Position = UDim2.new(0, 10, 0.5, -300)
-MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
-MainFrame.BackgroundTransparency = 0.05
-MainFrame.BorderSizePixel = 0
-MainFrame.ClipsDescendants = true
-MainFrame.Visible = false
-MainFrame.Active = true
-MainFrame.Selectable = true
-MainFrame.ZIndex = 2
-MainFrame.Parent = ScreenGui
-
-local FrameCorner = Instance.new("UICorner")
-FrameCorner.CornerRadius = UDim.new(0, 10)
-FrameCorner.Parent = MainFrame
-
-local FrameStroke = Instance.new("UIStroke")
-FrameStroke.Color = Color3.fromRGB(60, 60, 70)
-FrameStroke.Thickness = 2
-FrameStroke.Parent = MainFrame
-
--- Title Bar
-local TitleBar = Instance.new("Frame")
-TitleBar.Name = "TitleBar"
-TitleBar.Size = UDim2.new(1, 0, 0, 40)
-TitleBar.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-TitleBar.BorderSizePixel = 0
-TitleBar.Active = true
-TitleBar.Selectable = true
-TitleBar.Parent = MainFrame
-
-local TitleBarCorner = Instance.new("UICorner")
-TitleBarCorner.CornerRadius = UDim.new(0, 10)
-TitleBarCorner.Parent = TitleBar
-
-local Title = Instance.new("TextLabel")
-Title.Name = "Title"
-Title.Size = UDim2.new(1, -40, 1, 0)
-Title.Position = UDim2.new(0, 15, 0, 0)
-Title.BackgroundTransparency = 1
-Title.Text = "WHIZZBANG"
-Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.Font = Enum.Font.GothamBold
-Title.TextSize = 16
-Title.TextXAlignment = Enum.TextXAlignment.Left
-Title.Parent = TitleBar
-
-local CloseButton = Instance.new("TextButton")
-CloseButton.Name = "CloseButton"
-CloseButton.Size = UDim2.new(0, 30, 0, 30)
-CloseButton.Position = UDim2.new(1, -35, 0.5, -15)
-CloseButton.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
-CloseButton.BackgroundTransparency = 0.5
-CloseButton.Text = "✕"
-CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-CloseButton.Font = Enum.Font.GothamBold
-CloseButton.TextSize = 16
-CloseButton.Parent = TitleBar
-
-local CloseButtonCorner = Instance.new("UICorner")
-CloseButtonCorner.CornerRadius = UDim.new(0, 6)
-CloseButtonCorner.Parent = CloseButton
-
--- Content Frame
-local ContentFrame = Instance.new("Frame")
-ContentFrame.Name = "ContentFrame"
-ContentFrame.Size = UDim2.new(1, -20, 1, -60)
-ContentFrame.Position = UDim2.new(0, 10, 0, 50)
-ContentFrame.BackgroundTransparency = 1
-ContentFrame.Active = true
-ContentFrame.Selectable = true
-ContentFrame.Parent = MainFrame
-
--- Create scroll frame for settings with proper sizing
-local ScrollFrame = Instance.new("ScrollingFrame")
-ScrollFrame.Name = "ScrollFrame"
-ScrollFrame.Size = UDim2.new(1, 0, 1, 0)
-ScrollFrame.BackgroundTransparency = 1
-ScrollFrame.ScrollBarThickness = 6
-ScrollFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 90)
-ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 2200) -- Increased for bread cooking section
-ScrollFrame.ScrollingEnabled = true
-ScrollFrame.Active = true
-ScrollFrame.Selectable = true
-ScrollFrame.Parent = ContentFrame
-
--- Create UI List Layout
-local UIListLayout = Instance.new("UIListLayout")
-UIListLayout.Padding = UDim.new(0, 15)
-UIListLayout.Parent = ScrollFrame
-
--- ========== SIMPLIFIED BREAD COOKING SYSTEM ==========
-local function findProximityPrompt()
-    -- Look for any proximity prompt in the workspace
-    for _, obj in pairs(workspace:GetDescendants()) do
-        if obj:IsA("ProximityPrompt") then
-            -- Check if it's likely a "take dough" prompt
-            local promptText = obj.ActionText:lower()
-            if promptText:find("dough") or promptText:find("take") or promptText:find("pick") then
-                return obj
-            end
-        end
-    end
-    return nil
-end
-
-local function activatePrompt()
-    local prompt = findProximityPrompt()
-    if prompt then
-        -- Activate the proximity prompt
-        fireproximityprompt(prompt)
-        print("Activated proximity prompt: " .. prompt.ActionText)
-        return true
-    end
-    return false
-end
-
-local function findToolByName(toolName)
-    local character = LocalPlayer.Character
-    if not character then return nil end
-    
-    -- Check if tool is already equipped
-    local equippedTool = character:FindFirstChild(toolName)
-    if equippedTool then
-        return equippedTool
-    end
-    
-    -- Check backpack for tool
-    local backpack = LocalPlayer:FindFirstChild("Backpack")
-    if backpack then
-        -- Check for exact name first
-        local tool = backpack:FindFirstChild(toolName)
-        if not tool then
-            -- Check for case-insensitive match
-            for _, item in ipairs(backpack:GetChildren()) do
-                if item.Name:lower() == toolName:lower() then
-                    return item
-                end
-            end
-        else
-            return tool
-        end
-    end
-    
-    return nil
-end
-
-local function equipTool(toolName)
-    local character = LocalPlayer.Character
-    if not character then return false end
-    
-    local tool = findToolByName(toolName)
-    if tool then
-        -- Equip the tool if it's in backpack
-        if tool.Parent == LocalPlayer.Backpack then
-            tool.Parent = character
-        end
-        
-        -- Try to select the tool
-        LocalPlayer:SetSelectedTool(tool)
-        print("Equipped: " .. toolName)
-        return true
-    end
-    
-    return false
-end
-
-local function cookBread()
-    -- Step 1: Activate proximity prompt for dough
-    activatePrompt()
-    
-    -- Step 2: Auto equip dough
-    equipTool("dough")
-    
-    -- Step 3: Use remote to turn dough into bread
-    local kneadRemote = ReplicatedStorage:WaitForChild("Bread"):WaitForChild("KneadBread")
-    kneadRemote:FireServer("stale bred")
-    
-    -- Step 4: Cook the bread
-    local cookRemote = ReplicatedStorage:WaitForChild("Bread"):WaitForChild("CookRaw")
-    cookRemote:FireServer(10)
-    
-    -- Step 5: Eat the bread (if there's an eat function)
-    -- Note: You may need to add an eat remote if it exists
-    
-    print("Bread cooked! - Full process completed")
-end
-
-local function toggleAutoCook(enabled)
-    _G.AutoCookEnabled = enabled
-    
-    if enabled and not autoCookConnection then
-        print("Auto Cook: ON - Full process loop started")
-        print("Process: Activate prompt → Equip dough → Turn to bread → Cook → Loop")
-        
-        autoCookConnection = RunService.Heartbeat:Connect(function()
-            local currentTime = tick()
-            if currentTime - lastCookTime >= 0.5 then -- Changed to 0.5 seconds for better performance
-                cookBread()
-                lastCookTime = currentTime
-            end
-        end)
-    elseif not enabled and autoCookConnection then
-        print("Auto Cook: OFF")
-        autoCookConnection:Disconnect()
-        autoCookConnection = nil
-    end
-end
-
--- ========== MODIFIED NPC DETECTION SYSTEM ==========
+-- NPC Detection
 local function isNPC(model)
-    if not model:IsA("Model") then return false end
+    if not model or not model:IsA("Model") then return false end
+    if model.Name:lower():find("prop") then return false end
     
-    -- IGNORE NPCs with "prop" in name (case insensitive)
-    local modelName = model.Name:lower()
-    if modelName:find("prop") then
-        return false
-    end
-    
-    -- Check if it's a player character
     for _, player in ipairs(Players:GetPlayers()) do
         if player.Character == model then
             return false
         end
     end
     
-    -- Check for humanoid
     local humanoid = model:FindFirstChildOfClass("Humanoid")
-    if not humanoid then return false end
+    if not humanoid or humanoid.Health <= 0 then return false end
     
-    -- Check if it has character parts
-    local head = model:FindFirstChild("Head")
-    if not head then return false end
-    
-    -- Check for NPC indicators
-    if model:FindFirstChild("IsNPC") then return true end
-    if model.Name:lower():find("npc") then return true end
-    if model.Name:lower():find("enemy") then return true end
-    if model.Name:lower():find("boss") then return true end
-    if model.Name:lower():find("mob") then return true end
-    
-    -- Check if it has AI
-    local hasAI = model:FindFirstChild("AI") or model:FindFirstChild("AIController") or model:FindFirstChild("Path")
-    if hasAI then return true end
-    
-    -- Check for common NPC folders
-    local parent = model.Parent
-    while parent do
-        if parent.Name:lower():find("npc") or parent.Name:lower():find("enemy") or parent.Name:lower():find("boss") then
-            return true
-        end
-        parent = parent.Parent
-    end
-    
-    return true -- Assume any non-player character with humanoid is NPC
+    return true
 end
 
--- ========== ENHANCED AIMBOT SYSTEM WITH PREDICTION ==========
-local aimbotTarget = nil
-local aimbotConnection = nil
-local lastNPCSweep = 0
-local cachedNPCs = {} -- Cache for performance
-
--- Update FOV circle visibility
-local function updateFOVCircle()
-    if _G.AimbotEnabled and _G.AimbotShowFOV then
-        local fovRadius = (_G.AimbotFOV / 100) * 200
-        FOVCircle.Size = UDim2.new(0, fovRadius * 2, 0, fovRadius * 2)
-        FOVCircle.Position = UDim2.new(0.5, -fovRadius, 0.5, -fovRadius)
-        FOVCircle.Visible = true
+-- Simple head scaling
+local function scaleNPCHead(npc, scaleMultiplier)
+    if not npc or not npc.Parent then return end
+    
+    local head = npc:FindFirstChild("Head")
+    if not head then return end
+    
+    local humanoid = npc:FindFirstChildOfClass("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then return end
+    
+    -- Store original if not already stored
+    if not HeadScaleInstances[npc] then
+        local mesh = head:FindFirstChildOfClass("SpecialMesh")
+        HeadScaleInstances[npc] = {
+            OriginalSize = head.Size,
+            OriginalMeshScale = mesh and mesh.Scale or Vector3.new(1, 1, 1),
+            Mesh = mesh
+        }
+    end
+    
+    -- Apply scaling
+    local data = HeadScaleInstances[npc]
+    local scaleValue = scaleMultiplier / 20  -- Reduced for more reasonable scaling
+    if scaleValue < 1.5 then scaleValue = 1.5 end
+    
+    if data.Mesh and data.Mesh.Parent == head then
+        data.Mesh.Scale = data.OriginalMeshScale * scaleValue
     else
-        FOVCircle.Visible = false
+        head.Size = data.OriginalSize * scaleValue
     end
 end
 
--- Enhanced visibility check for shooting accuracy
-local function checkVisibility(startPos, endPos, targetNPC)
-    -- Create raycast parameters
-    local raycastParams = RaycastParams.new()
-    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
-    raycastParams.FilterDescendantsInstances = {LocalPlayer.Character}
-    raycastParams.IgnoreWater = true
-    
-    -- Check multiple points for better accuracy
-    local checkPoints = {}
-    
-    if targetNPC then
-        local head = targetNPC:FindFirstChild("Head")
-        local torso = targetNPC:FindFirstChild("HumanoidRootPart") or targetNPC:FindFirstChild("Torso") or targetNPC:FindFirstChild("UpperTorso")
-        
-        if head then table.insert(checkPoints, head.Position) end
-        if torso then 
-            table.insert(checkPoints, torso.Position)
-            -- Add points around torso for better coverage
-            table.insert(checkPoints, torso.Position + Vector3.new(0, 1, 0))
-            table.insert(checkPoints, torso.Position + Vector3.new(0, -0.5, 0))
-        end
-    else
-        table.insert(checkPoints, endPos)
-    end
-    
-    -- Check all points
-    for _, point in ipairs(checkPoints) do
-        local raycastResult = workspace:Raycast(startPos, (point - startPos), raycastParams)
-        
-        -- If no hit at this point, target is visible
-        if not raycastResult then
-            return true
-        end
-        
-        -- Check if we hit the target or something else
-        local hitModel = raycastResult.Instance
-        while hitModel and hitModel ~= workspace do
-            if hitModel:IsA("Model") and TrackedNPCs[hitModel] then
-                return true -- Hit the target (still visible)
+local function resetNPCHead(npc)
+    if HeadScaleInstances[npc] then
+        local head = npc:FindFirstChild("Head")
+        if head then
+            local data = HeadScaleInstances[npc]
+            if data.Mesh and data.Mesh.Parent == head then
+                data.Mesh.Scale = data.OriginalMeshScale
+            else
+                head.Size = data.OriginalSize
             end
-            hitModel = hitModel.Parent
+        end
+        HeadScaleInstances[npc] = nil
+    end
+end
+
+local function resetAllHeadScales()
+    for npc, _ in pairs(HeadScaleInstances) do
+        resetNPCHead(npc)
+    end
+    HeadScaleInstances = {}
+end
+
+-- Simple Compact ESP
+local function createESP(npc)
+    if ESPInstances[npc] then return end
+    
+    local espContainer = Instance.new("Frame")
+    espContainer.Name = "ESP_" .. npc.Name
+    espContainer.BackgroundTransparency = 1
+    espContainer.Size = UDim2.new(0, 40, 0, 12)
+    espContainer.Visible = false
+    espContainer.ZIndex = 999
+    ESPInstances[npc] = espContainer
+    
+    -- Small health bar
+    local healthBar = Instance.new("Frame")
+    healthBar.Name = "HealthBar"
+    healthBar.Size = UDim2.new(1, 0, 0.5, 0)
+    healthBar.Position = UDim2.new(0, 0, 0.5, 0)
+    healthBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    healthBar.BackgroundTransparency = 0.3
+    healthBar.BorderSizePixel = 0
+    healthBar.ZIndex = 1000
+    healthBar.Parent = espContainer
+    
+    local healthFill = Instance.new("Frame")
+    healthFill.Name = "HealthFill"
+    healthFill.Size = UDim2.new(1, 0, 1, 0)
+    healthFill.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+    healthFill.BackgroundTransparency = 0.2
+    healthFill.BorderSizePixel = 0
+    healthFill.ZIndex = 1001
+    healthFill.Parent = healthBar
+    
+    -- Health text
+    local healthText = Instance.new("TextLabel")
+    healthText.Name = "HealthText"
+    healthText.Size = UDim2.new(1, 0, 0.5, 0)
+    healthText.Position = UDim2.new(0, 0, 0, 0)
+    healthText.BackgroundTransparency = 1
+    healthText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    healthText.TextSize = 8
+    healthText.Font = Enum.Font.Gotham
+    healthText.TextStrokeTransparency = 0.7
+    healthText.ZIndex = 1000
+    healthText.Parent = espContainer
+    
+    espContainer.Parent = ScreenGui
+end
+
+local function removeESP(npc)
+    if ESPInstances[npc] then
+        ESPInstances[npc]:Destroy()
+        ESPInstances[npc] = nil
+    end
+end
+
+local function updateESP()
+    if not _G.ESPEnabled then return end
+    
+    for npc, esp in pairs(ESPInstances) do
+        if npc and npc.Parent then
+            local humanoid = npc:FindFirstChildOfClass("Humanoid")
+            local head = npc:FindFirstChild("Head")
+            
+            if humanoid and humanoid.Health > 0 and head then
+                local screenPoint, onScreen = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 2, 0))
+                
+                if onScreen then
+                    esp.Position = UDim2.new(0, screenPoint.X - 20, 0, screenPoint.Y - 6)
+                    esp.Visible = true
+                    
+                    -- Update health
+                    local healthPercent = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
+                    local healthFill = esp:FindFirstChild("HealthBar"):FindFirstChild("HealthFill")
+                    local healthText = esp:FindFirstChild("HealthText")
+                    
+                    if healthFill then
+                        healthFill.Size = UDim2.new(healthPercent, 0, 1, 0)
+                        
+                        -- Color based on health
+                        if healthPercent > 0.6 then
+                            healthFill.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+                        elseif healthPercent > 0.3 then
+                            healthFill.BackgroundColor3 = Color3.fromRGB(255, 200, 0)
+                        else
+                            healthFill.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+                        end
+                    end
+                    
+                    if healthText then
+                        healthText.Text = math.floor(humanoid.Health)
+                    end
+                else
+                    esp.Visible = false
+                end
+            else
+                removeESP(npc)
+            end
+        else
+            removeESP(npc)
         end
     end
-    
-    -- All points were blocked
-    return false
 end
 
--- Calculate enemy velocity for prediction
-local function calculateVelocity(npc)
-    local currentTime = tick()
-    local rootPart = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChild("Torso") or npc:FindFirstChild("UpperTorso")
-    
-    if not rootPart then return Vector3.zero end
-    
-    -- Store current position and time
-    if not enemyLastPositions[npc] then
-        enemyLastPositions[npc] = rootPart.Position
-        enemyLastUpdate[npc] = currentTime
-        return Vector3.zero
-    end
-    
-    -- Calculate time difference
-    local timeDiff = currentTime - enemyLastUpdate[npc]
-    if timeDiff < 0.01 then return enemyVelocity[npc] or Vector3.zero end
-    
-    -- Calculate velocity
-    local posDiff = rootPart.Position - enemyLastPositions[npc]
-    local velocity = posDiff / timeDiff
-    
-    -- Update stored values
-    enemyLastPositions[npc] = rootPart.Position
-    enemyLastUpdate[npc] = currentTime
-    enemyVelocity[npc] = velocity
-    
-    return velocity
-end
-
--- Predict target position based on velocity
-local function predictPosition(targetPosition, velocity, timeToTarget)
-    if not _G.AimbotPrediction or velocity.Magnitude < 5 then
-        return targetPosition
-    end
-    
-    -- Simple linear prediction
-    local predictedPosition = targetPosition + (velocity * timeToTarget * _G.AimbotPredictionStrength)
-    return predictedPosition
-end
-
--- Enhanced NPC finding with prediction
+-- Simple Aimbot
 local function getClosestNPC()
     local closest = nil
     local closestDistance = math.huge
     local cameraPos = Camera.CFrame.Position
     
-    for npc, _ in pairs(cachedNPCs) do
+    for npc, _ in pairs(TrackedNPCs) do
         if npc and npc.Parent then
             local humanoid = npc:FindFirstChildOfClass("Humanoid")
-            local rootPart = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChild("Torso") or npc:FindFirstChild("UpperTorso")
+            local head = npc:FindFirstChild("Head")
             
-            -- Check if NPC is valid and alive
-            if humanoid and rootPart and humanoid.Health > 0 then
-                -- Skip NPCs with "prop" in name
-                if npc.Name:lower():find("prop") then
-                    continue
-                end
+            if humanoid and humanoid.Health > 0 and head then
+                local distance = (head.Position - cameraPos).Magnitude
+                if distance > _G.AimbotMaxDistance then continue end
                 
-                local distance = (rootPart.Position - cameraPos).Magnitude
-                
-                -- Check maximum distance
-                if distance > _G.AimbotMaxDistance then
-                    continue
-                end
-                
-                -- Check if NPC is within FOV
-                local screenPoint, onScreen = Camera:WorldToViewportPoint(rootPart.Position)
+                local screenPoint, onScreen = Camera:WorldToViewportPoint(head.Position)
                 if onScreen then
                     local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
                     local pointVector = Vector2.new(screenPoint.X, screenPoint.Y)
                     local distanceFromCenter = (pointVector - screenCenter).Magnitude
-                    
-                    -- Check if within aimbot FOV circle
                     local fovRadius = (_G.AimbotFOV / 100) * math.min(Camera.ViewportSize.X, Camera.ViewportSize.Y) / 2
                     
                     if distanceFromCenter <= fovRadius and distance < closestDistance then
-                        -- Wall check if enabled
-                        if _G.AimbotWallCheck then
-                            local isVisible = checkVisibility(cameraPos, rootPart.Position, npc)
-                            if isVisible then
-                                closestDistance = distance
-                                closest = npc
-                            end
-                        else
-                            closestDistance = distance
-                            closest = npc
-                        end
+                        closestDistance = distance
+                        closest = npc
                     end
                 end
-            else
-                -- Remove dead NPCs from cache
-                cachedNPCs[npc] = nil
-                enemyVelocity[npc] = nil
-                enemyLastPositions[npc] = nil
-                enemyLastUpdate[npc] = nil
             end
-        else
-            -- Remove invalid NPCs from cache
-            cachedNPCs[npc] = nil
-            enemyVelocity[npc] = nil
-            enemyLastPositions[npc] = nil
-            enemyLastUpdate[npc] = nil
         end
     end
     
     return closest
 end
 
--- Enhanced smooth aiming with prediction
-local function smoothAim(targetPosition, targetNPC)
-    local camera = workspace.CurrentCamera
-    local currentCF = camera.CFrame
+local function smoothAim(targetPosition)
+    local currentCF = Camera.CFrame
     local currentPos = currentCF.Position
     
-    -- Calculate distance to target
-    local distance = (targetPosition - currentPos).Magnitude
-    
-    -- Get target velocity for prediction
-    local velocity = Vector3.zero
-    if targetNPC then
-        velocity = calculateVelocity(targetNPC)
-        
-        -- Predict position for moving targets
-        if _G.AimbotPrediction and velocity.Magnitude > 2 then
-            -- Estimate time for bullet to reach target (adjust based on game)
-            local timeToTarget = distance / 500 -- Adjust this value based on your game's bullet speed
-            targetPosition = predictPosition(targetPosition, velocity, timeToTarget)
-        end
-    end
-    
-    -- Calculate target direction
-    local targetCF = CFrame.lookAt(currentPos, targetPosition)
-    
-    -- Calculate angle difference
+    local lookVector = (targetPosition - currentPos).Unit
     local currentLook = currentCF.LookVector
-    local targetLook = targetCF.LookVector
-    local angleDiff = math.acos(math.clamp(currentLook:Dot(targetLook), -1, 1))
     
-    -- Adjust smoothness based on distance and angle
-    local dynamicSmoothness = _G.AimbotSmoothness
-    
-    -- Less smoothing for close targets
-    if distance < 50 then
-        dynamicSmoothness = _G.AimbotSmoothness * 0.7
-    -- More smoothing for far targets
-    elseif distance > 200 then
-        dynamicSmoothness = _G.AimbotSmoothness * 1.3
-    end
-    
-    -- Less smoothing for large angle differences (faster initial turn)
-    if angleDiff > 0.5 then
-        dynamicSmoothness = dynamicSmoothness * 0.5
-    end
-    
-    -- Clamp smoothness
-    dynamicSmoothness = math.clamp(dynamicSmoothness, 0.05, 0.9)
-    
-    -- Smooth interpolation
-    local smoothFactor = 1 - dynamicSmoothness
-    local newCF = currentCF:Lerp(targetCF, smoothFactor)
-    camera.CFrame = newCF
+    local newLook = currentLook:Lerp(lookVector, _G.AimbotSmoothness)
+    Camera.CFrame = CFrame.new(currentPos, currentPos + newLook)
 end
 
--- Enhanced auto shoot with timing
-local lastShotTime = 0
-local function autoShoot(targetNPC)
-    if not targetNPC or not _G.AimbotAutoShoot then return end
-    
-    local currentTime = tick()
-    if currentTime - lastShotTime < 0.1 then return end -- Limit shooting rate
-    
-    -- Check if player has a tool equipped
-    local character = LocalPlayer.Character
-    if not character then return end
-    
-    local tool = character:FindFirstChildOfClass("Tool")
-    if tool then
-        -- Try to find a remote event for shooting
-        for _, child in ipairs(tool:GetDescendants()) do
-            if child:IsA("RemoteEvent") and (child.Name:lower():find("fire") or 
-               child.Name:lower():find("shoot") or child.Name:lower():find("attack")) then
-                -- Fire the remote event
-                child:FireServer()
-                lastShotTime = currentTime
-                break
-            end
+-- Main Game Loop
+local function mainLoop()
+    if _G.Disabled or not _G.NPCEnabled then
+        -- Clean up
+        for npc, _ in pairs(TrackedNPCs) do
+            removeESP(npc)
+            resetNPCHead(npc)
         end
-        
-        -- Also try to use mouse click if remote not found
-        if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
-            -- Simulate continuous firing by holding mouse button
-            lastShotTime = currentTime
-        end
-    end
-end
-
--- Enhanced aimbot update with better timing
-local function updateAimbot()
-    local currentTime = tick()
-    if currentTime - lastAimbotUpdate < _G.AimbotUpdateRate then return end
-    lastAimbotUpdate = currentTime
-    
-    if not _G.AimbotEnabled or not LocalPlayer.Character then
-        aimbotTarget = nil
-        updateFOVCircle()
+        TrackedNPCs = {}
+        ESPInstances = {}
+        HeadScaleInstances = {}
+        currentTarget = nil
         return
     end
     
-    local targetNPC = getClosestNPC()
-    
-    if targetNPC then
-        local targetPart = nil
-        local targetPosition = nil
-        
-        if _G.AimbotTargetPart == "Head" then
-            targetPart = targetNPC:FindFirstChild("Head")
-            if targetPart then
-                targetPosition = targetPart.Position
-            end
-        elseif _G.AimbotTargetPart == "Torso" then
-            targetPart = targetNPC:FindFirstChild("HumanoidRootPart") or 
-                         targetNPC:FindFirstChild("Torso") or 
-                         targetNPC:FindFirstChild("UpperTorso")
-            if targetPart then
-                targetPosition = targetPart.Position
-            end
-        end
-        
-        if targetPosition then
-            smoothAim(targetPosition, targetNPC)
-            
-            -- Auto shoot if enabled
-            if _G.AimbotAutoShoot then
-                autoShoot(targetNPC)
-            end
-        end
-    end
-    
-    updateFOVCircle()
-end
-
-local function toggleAimbot(enabled)
-    _G.AimbotEnabled = enabled
-    
-    if enabled and not aimbotConnection then
-        aimbotConnection = RunService.RenderStepped:Connect(updateAimbot)
-    elseif not enabled and aimbotConnection then
-        aimbotConnection:Disconnect()
-        aimbotConnection = nil
-        aimbotTarget = nil
-        FOVCircle.Visible = false
-        
-        -- Clear prediction data
-        enemyVelocity = {}
-        enemyLastPositions = {}
-        enemyLastUpdate = {}
-    end
-end
-
--- ========== OPTIMIZED ESP SYSTEM ==========
-local function createCompactESP(npc)
-    if NPCESPInstances[npc] then return end
-    
-    -- Create ultra compact ESP container
-    local espContainer = Instance.new("Frame")
-    espContainer.Name = "CompactESP_" .. tostring(npc):gsub("[^%w]", "")
-    espContainer.BackgroundTransparency = 1
-    espContainer.Size = UDim2.new(0, 60, 0, 40)
-    espContainer.Parent = ScreenGui
-    NPCESPInstances[npc] = espContainer
-    
-    -- Modern small name label
-    local nameLabel = Instance.new("TextLabel")
-    nameLabel.Name = "Name"
-    nameLabel.Text = npc.Name:sub(1, 8)
-    nameLabel.TextColor3 = Color3.fromRGB(255, 150, 0)
-    nameLabel.BackgroundTransparency = 1
-    nameLabel.TextSize = 10
-    nameLabel.Font = Enum.Font.GothamSemibold
-    nameLabel.Size = UDim2.new(1, 0, 0, 12)
-    nameLabel.Position = UDim2.new(0, 0, 0, 0)
-    nameLabel.Parent = espContainer
-    
-    -- Mini health bar with outline
-    local healthBarBG = Instance.new("Frame")
-    healthBarBG.Name = "HealthBG"
-    healthBarBG.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    healthBarBG.Size = UDim2.new(1, 0, 0, 4)
-    healthBarBG.Position = UDim2.new(0, 0, 0, 15)
-    healthBarBG.BorderSizePixel = 0
-    healthBarBG.Parent = espContainer
-    
-    local healthBarCorner = Instance.new("UICorner")
-    healthBarCorner.CornerRadius = UDim.new(1, 0)
-    healthBarCorner.Parent = healthBarBG
-    
-    local healthBar = Instance.new("Frame")
-    healthBar.Name = "Health"
-    healthBar.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-    healthBar.Size = UDim2.new(1, 0, 1, 0)
-    healthBar.BorderSizePixel = 0
-    healthBar.Parent = healthBarBG
-    
-    local healthBarInnerCorner = Instance.new("UICorner")
-    healthBarInnerCorner.CornerRadius = UDim.new(1, 0)
-    healthBarInnerCorner.Parent = healthBar
-    
-    -- Modern gradient for health
-    local healthGradient = Instance.new("UIGradient")
-    healthGradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 50, 50)),
-        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 200, 50)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(50, 255, 50))
-    })
-    healthGradient.Parent = healthBar
-    
-    -- Tiny distance indicator
-    local distanceLabel = Instance.new("TextLabel")
-    distanceLabel.Name = "Distance"
-    distanceLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
-    distanceLabel.BackgroundTransparency = 1
-    distanceLabel.TextSize = 9
-    distanceLabel.Font = Enum.Font.Gotham
-    distanceLabel.Size = UDim2.new(1, 0, 0, 10)
-    distanceLabel.Position = UDim2.new(0, 0, 0, 21)
-    distanceLabel.Parent = espContainer
-end
-
-local function removeNPCESP(npc)
-    if NPCESPInstances[npc] then
-        NPCESPInstances[npc]:Destroy()
-        NPCESPInstances[npc] = nil
-    end
-end
-
--- Optimized ESP updater
-local function updateCompactESP()
-    local currentTime = tick()
-    if currentTime - lastESPUpdate < _G.ESPUpdateRate then return end
-    lastESPUpdate = currentTime
-    
-    if not _G.ESPEnabled then return end
-    
-    for npc, esp in pairs(NPCESPInstances) do
-        if npc and npc.Parent then
-            local humanoid = npc:FindFirstChildOfClass("Humanoid")
-            local rootPart = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChild("Torso") or npc:FindFirstChild("UpperTorso")
-            
-            if humanoid and rootPart and humanoid.Health > 0 then
-                -- Update ESP position
-                local position, onScreen = Camera:WorldToViewportPoint(rootPart.Position + Vector3.new(0, 2.5, 0))
+    -- 1. Find and track NPCs
+    for _, model in ipairs(Workspace:GetChildren()) do
+        if model:IsA("Model") and not TrackedNPCs[model] then
+            if isNPC(model) then
+                TrackedNPCs[model] = true
                 
-                if onScreen then
-                    local distance = (rootPart.Position - Camera.CFrame.Position).Magnitude
-                    
-                    -- Update ESP elements
-                    local nameLabel = esp:FindFirstChild("Name")
-                    local distanceLabel = esp:FindFirstChild("Distance")
-                    local healthBarBG = esp:FindFirstChild("HealthBG")
-                    local healthBar = healthBarBG and healthBarBG:FindFirstChild("Health")
-                    
-                    if nameLabel then
-                        nameLabel.Position = UDim2.new(0, position.X - 30, 0, position.Y - 40)
-                        nameLabel.Visible = true
-                    end
-                    
-                    if distanceLabel then
-                        distanceLabel.Text = math.floor(distance) .. "st"
-                        distanceLabel.Position = UDim2.new(0, position.X - 30, 0, position.Y - 28)
-                        distanceLabel.Visible = true
-                    end
-                    
-                    if healthBar then
-                        local healthPercent = humanoid.Health / humanoid.MaxHealth
-                        healthPercent = math.clamp(healthPercent, 0, 1)
-                        healthBar.Size = UDim2.new(healthPercent, 0, 1, 0)
-                        
-                        if healthBarBG then
-                            healthBarBG.Position = UDim2.new(0, position.X - 30, 0, position.Y - 18)
-                            healthBarBG.Visible = healthPercent > 0
-                        end
-                    end
-                    
-                    esp.Visible = true
-                else
-                    esp.Visible = false
+                -- Create ESP if enabled
+                if _G.ESPEnabled then
+                    createESP(model)
                 end
-            else
-                -- NPC is dead or invalid
-                removeNPCESP(npc)
-                TrackedNPCs[npc] = nil
-                cachedNPCs[npc] = nil
-                enemyVelocity[npc] = nil
-                enemyLastPositions[npc] = nil
-                enemyLastUpdate[npc] = nil
+                
+                -- Scale head if enabled
+                if _G.HitboxAllEnabled then
+                    scaleNPCHead(model, _G.NPCHeadSize)
+                end
             end
-        else
-            -- NPC no longer exists
-            removeNPCESP(npc)
+        end
+    end
+    
+    -- 2. Clean up dead/removed NPCs
+    for npc, _ in pairs(TrackedNPCs) do
+        if not npc.Parent or not isNPC(npc) then
             TrackedNPCs[npc] = nil
-            cachedNPCs[npc] = nil
-            enemyVelocity[npc] = nil
-            enemyLastPositions[npc] = nil
-            enemyLastUpdate[npc] = nil
+            removeESP(npc)
+            resetNPCHead(npc)
         end
     end
-end
-
-local function toggleESP(enabled)
-    _G.ESPEnabled = enabled
     
-    if not enabled then
-        for npc, esp in pairs(NPCESPInstances) do
-            esp:Destroy()
-        end
-        NPCESPInstances = {}
-    end
-end
-
--- ========== OPTIMIZED NPC TRACKING ==========
-local function findAndUpdateNPCs()
-    local currentTime = tick()
-    if currentTime - lastNPCSweep < 0.5 then return end
-    lastNPCSweep = currentTime
+    -- 3. Update ESP
+    updateESP()
     
-    -- Clear cache when disabled
-    if _G.Disabled and not _G.ESPEnabled and not _G.AimbotEnabled then
-        cachedNPCs = {}
-        return
-    end
-    
-    -- Only scan when ESP or Aimbot is enabled
-    if _G.ESPEnabled or _G.AimbotEnabled then
-        for _, model in ipairs(workspace:GetDescendants()) do
-            if model:IsA("Model") and isNPC(model) then
-                local humanoid = model:FindFirstChildOfClass("Humanoid")
-                if humanoid and humanoid.Health > 0 then
-                    if not TrackedNPCs[model] then
-                        TrackedNPCs[model] = true
-                        cachedNPCs[model] = true
-                        
-                        -- Create ESP if enabled
-                        if _G.ESPEnabled then
-                            createCompactESP(model)
+    -- 4. Run Aimbot
+    if _G.AimbotEnabled and LocalPlayer.Character then
+        local targetNPC = getClosestNPC()
+        
+        if targetNPC then
+            local head = targetNPC:FindFirstChild("Head")
+            if head then
+                smoothAim(head.Position)
+                
+                -- Auto shoot
+                if _G.AimbotAutoShoot then
+                    local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
+                    if tool then
+                        for _, v in ipairs(tool:GetDescendants()) do
+                            if v:IsA("RemoteEvent") then
+                                pcall(function() v:FireServer() end)
+                                break
+                            end
                         end
                     end
-                else
-                    -- NPC is dead
-                    TrackedNPCs[model] = nil
-                    cachedNPCs[model] = nil
-                    enemyVelocity[model] = nil
-                    enemyLastPositions[model] = nil
-                    enemyLastUpdate[model] = nil
-                    removeNPCESP(model)
                 end
             end
         end
     end
 end
 
--- ========== IMPROVED HITBOX SYSTEM ==========
-local function adjustNPCHitbox(character, headSize)
+-- Bread Cooking
+local function cookBread()
     pcall(function()
-        local head = character:FindFirstChild("Head")
-        local humanoid = character:FindFirstChildOfClass("Humanoid")
-        
-        if head and humanoid then
-            -- Skip NPCs with "prop" in name for hitbox adjustment
-            if character.Name:lower():find("prop") then
-                return
+        local breadFolder = ReplicatedStorage:FindFirstChild("Bread")
+        if breadFolder then
+            local kneadRemote = breadFolder:FindFirstChild("KneadBread")
+            local cookRemote = breadFolder:FindFirstChild("CookRaw")
+            
+            if kneadRemote then
+                kneadRemote:FireServer("stale bred")
             end
             
-            local isAlive = humanoid.Health > 0
-            
-            if isAlive then
-                head.Size = Vector3.new(headSize, headSize, headSize)
-                head.Transparency = 0.6
-                head.BrickColor = BrickColor.new("Bright orange")
-                head.Material = Enum.Material.Neon
-                head.CanCollide = false
-                head.Massless = true
-                
-                local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
-                if torso then
-                    torso.Size = Vector3.new(headSize * 1.4, headSize * 1.1, headSize * 0.7)
-                    torso.Transparency = 0.7
-                    torso.BrickColor = BrickColor.new("Bright orange")
-                    torso.Material = Enum.Material.Neon
-                    torso.CanCollide = false
-                    torso.Massless = true
-                end
-            else
-                -- Reset when dead
-                head.Size = Vector3.new(2, 1, 1)
-                head.Transparency = 0
-                head.BrickColor = BrickColor.new("Medium stone grey")
-                head.Material = Enum.Material.Plastic
-                head.CanCollide = true
-                head.Massless = false
-                
-                local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
-                if torso then
-                    torso.Size = Vector3.new(2, 2, 1)
-                    torso.Transparency = 0
-                    torso.BrickColor = BrickColor.new("Medium stone grey")
-                    torso.Material = Enum.Material.Plastic
-                    torso.CanCollide = true
-                    torso.Massless = false
-                end
-                
-                -- Remove from tracking
-                TrackedNPCs[character] = nil
-                cachedNPCs[character] = nil
-                enemyVelocity[character] = nil
-                enemyLastPositions[character] = nil
-                enemyLastUpdate[character] = nil
-                removeNPCESP(character)
+            if cookRemote then
+                cookRemote:FireServer(10)
             end
         end
     end)
 end
 
--- Instant Interact System
-local instantInteractConnections = {}
-local activePrompts = {}
-
-local function onPromptButtonHoldBegan(prompt)
-    if not _G.InstantInteractEnabled then return end
+local function startAutoCook()
+    if cooking then return end
+    cooking = true
     
-    local originalHoldDuration = prompt.HoldDuration
-    fireproximityprompt(prompt)
-    
-    if originalHoldDuration > 0.5 then
-        local promptId = tostring(prompt)
-        
-        if activePrompts[promptId] then
-            activePrompts[promptId]:Disconnect()
+    spawn(function()
+        while _G.AutoCookBread do
+            cookBread()
+            wait(_G.AutoCookDelay)
         end
-        
-        local connection = RunService.Heartbeat:Connect(function()
-            if prompt and prompt.Parent then
-                fireproximityprompt(prompt)
-            else
-                connection:Disconnect()
-                activePrompts[promptId] = nil
-            end
-        end)
-        
-        activePrompts[promptId] = connection
-        
-        task.delay(originalHoldDuration, function()
-            if connection then
-                connection:Disconnect()
-            end
-            activePrompts[promptId] = nil
-        end
-        )
-    end
+        cooking = false
+    end)
 end
 
-local function onPromptShown(prompt)
-    if not _G.InstantInteractEnabled then return end
-    prompt.MaxActivationDistance = math.max(prompt.MaxActivationDistance, 25)
-end
-
-local function toggleInstantInteract(enabled)
-    _G.InstantInteractEnabled = enabled
-    
-    if enabled then
-        for _, obj in pairs(workspace:GetDescendants()) do
-            if obj:IsA("ProximityPrompt") then
-                obj.MaxActivationDistance = math.max(obj.MaxActivationDistance, 25)
-            end
-        end
-        
-        local promptShown = ProximityPromptService.PromptShown:Connect(onPromptShown)
-        local promptBegan = ProximityPromptService.PromptButtonHoldBegan:Connect(onPromptButtonHoldBegan)
-        
-        local descendantAdded = workspace.DescendantAdded:Connect(function(obj)
-            if obj:IsA("ProximityPrompt") then
-                obj.MaxActivationDistance = math.max(obj.MaxActivationDistance, 25)
-            end
-        end)
-        
-        table.insert(instantInteractConnections, promptShown)
-        table.insert(instantInteractConnections, promptBegan)
-        table.insert(instantInteractConnections, descendantAdded)
-        
-    else
-        for _, connection in ipairs(instantInteractConnections) do
-            connection:Disconnect()
-        end
-        instantInteractConnections = {}
-        
-        for promptId, connection in pairs(activePrompts) do
-            if connection then
-                connection:Disconnect()
-            end
-        end
-        activePrompts = {}
-    end
-end
-
--- ========== CLASS SELECTION SYSTEM ==========
+-- Class Selection
 local function selectClass(classType)
-    local remotePath = ReplicatedStorage:WaitForChild("RemoteEvents"):WaitForChild("Player"):WaitForChild("ChooseClass")
-    local args = {}
-    
-    if classType == "medic" then
-        args = {"medic", "medic"}
-    elseif classType == "engineer" then
-        args = {"engi", "engineer"}
-    elseif classType == "rifleman" then
-        args = {"rifle", "rifleman"}
-    elseif classType == "officer" then
-        args = {"officer", "officer"}
-    elseif classType == "machinegun" then
-        args = {"auto", "automatic"}
-    end
-    
-    remotePath:FireServer(unpack(args))
-    print("Selected class: " .. classType)
+    pcall(function()
+        local remotePath = ReplicatedStorage:WaitForChild("RemoteEvents"):WaitForChild("Player"):WaitForChild("ChooseClass")
+        local args = {}
+        
+        if classType == "medic" then
+            args = {"medic", "medic"}
+        elseif classType == "engineer" then
+            args = {"engi", "engineer"}
+        elseif classType == "rifleman" then
+            args = {"rifle", "rifleman"}
+        elseif classType == "officer" then
+            args = {"officer", "officer"}
+        elseif classType == "machinegun" then
+            args = {"auto", "automatic"}
+        end
+        
+        remotePath:FireServer(unpack(args))
+    end)
 end
 
--- Function to create ON/OFF toggle buttons
+-- GUI SETUP
 local function createToggleButton(label, default, callback)
     local container = Instance.new("Frame")
-    container.Size = UDim2.new(1, 0, 0, 45)
+    container.Size = UDim2.new(1, 0, 0, 30)
     container.BackgroundTransparency = 1
     
     local labelText = Instance.new("TextLabel")
-    labelText.Size = UDim2.new(0.6, 0, 1, 0)
+    labelText.Size = UDim2.new(0.7, 0, 1, 0)
     labelText.BackgroundTransparency = 1
     labelText.Text = label
     labelText.TextColor3 = Color3.fromRGB(220, 220, 220)
     labelText.Font = Enum.Font.GothamMedium
-    labelText.TextSize = 14
+    labelText.TextSize = 12
     labelText.TextXAlignment = Enum.TextXAlignment.Left
     labelText.Parent = container
     
-    -- Create the toggle button
     local toggleButton = Instance.new("TextButton")
-    toggleButton.Size = UDim2.new(0.35, 0, 0.7, 0)
-    toggleButton.Position = UDim2.new(0.65, 0, 0.15, 0)
+    toggleButton.Size = UDim2.new(0.25, 0, 0.7, 0)
+    toggleButton.Position = UDim2.new(0.75, 0, 0.15, 0)
     toggleButton.BackgroundColor3 = default and Color3.fromRGB(0, 120, 215) or Color3.fromRGB(200, 50, 50)
     toggleButton.Text = default and "ON" or "OFF"
     toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
     toggleButton.Font = Enum.Font.GothamBold
-    toggleButton.TextSize = 14
+    toggleButton.TextSize = 11
     toggleButton.Parent = container
     
-    local toggleCorner = Instance.new("UICorner")
-    toggleCorner.CornerRadius = UDim.new(0, 8)
-    toggleCorner.Parent = toggleButton
-    
-    local toggleStroke = Instance.new("UIStroke")
-    toggleStroke.Color = Color3.fromRGB(60, 60, 70)
-    toggleStroke.Thickness = 2
-    toggleStroke.Parent = toggleButton
-    
-    -- Store the current state
     local state = default
     
-    -- Function to update button appearance
-    local function updateButton()
-        if state then
-            toggleButton.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
-            toggleButton.Text = "ON"
-        else
-            toggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-            toggleButton.Text = "OFF"
-        end
-    end
-    
-    -- Initialize button
-    updateButton()
-    
-    -- Button click event
     toggleButton.MouseButton1Click:Connect(function()
         state = not state
-        updateButton()
+        toggleButton.BackgroundColor3 = state and Color3.fromRGB(0, 120, 215) or Color3.fromRGB(200, 50, 50)
+        toggleButton.Text = state and "ON" or "OFF"
         callback(state)
     end)
     
     return container, function(newState)
         state = newState
-        updateButton()
+        toggleButton.BackgroundColor3 = state and Color3.fromRGB(0, 120, 215) or Color3.fromRGB(200, 50, 50)
+        toggleButton.Text = state and "ON" or "OFF"
+        callback(state)
     end
 end
 
--- ========== YOUR GUI SECTIONS ==========
--- Store toggle update functions
+local function createNumberInput(label, min, max, default, callback)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, 0, 0, 50)
+    container.BackgroundTransparency = 1
+    
+    local labelText = Instance.new("TextLabel")
+    labelText.Size = UDim2.new(1, 0, 0, 20)
+    labelText.BackgroundTransparency = 1
+    labelText.Text = label
+    labelText.TextColor3 = Color3.fromRGB(200, 200, 200)
+    labelText.Font = Enum.Font.GothamMedium
+    labelText.TextSize = 12
+    labelText.TextXAlignment = Enum.TextXAlignment.Left
+    labelText.Parent = container
+    
+    local textBox = Instance.new("TextBox")
+    textBox.Size = UDim2.new(1, 0, 0, 25)
+    textBox.Position = UDim2.new(0, 0, 0, 20)
+    textBox.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+    textBox.Text = tostring(default)
+    textBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+    textBox.Font = Enum.Font.Gotham
+    textBox.TextSize = 12
+    textBox.TextXAlignment = Enum.TextXAlignment.Center
+    textBox.ClearTextOnFocus = false
+    textBox.Parent = container
+    
+    textBox.FocusLost:Connect(function()
+        local num = tonumber(textBox.Text)
+        if num then
+            num = math.clamp(num, min, max)
+            textBox.Text = tostring(num)
+            callback(num)
+        else
+            textBox.Text = tostring(default)
+        end
+    end)
+    
+    return container
+end
+
+-- Main GUI Frame
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 320, 0, 500)
+MainFrame.Position = UDim2.new(1, -340, 0.5, -250)
+MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+MainFrame.BackgroundTransparency = 0.05
+MainFrame.BorderSizePixel = 0
+MainFrame.Visible = false
+MainFrame.Parent = ScreenGui
+
+-- Title Bar
+local TitleBar = Instance.new("Frame")
+TitleBar.Name = "TitleBar"
+TitleBar.Size = UDim2.new(1, 0, 0, 30)
+TitleBar.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+TitleBar.BorderSizePixel = 0
+TitleBar.Parent = MainFrame
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -40, 1, 0)
+Title.Position = UDim2.new(0, 10, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "WHIZZBANG"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 14
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = TitleBar
+
+local CloseButton = Instance.new("TextButton")
+CloseButton.Size = UDim2.new(0, 25, 0, 25)
+CloseButton.Position = UDim2.new(1, -30, 0.5, -12.5)
+CloseButton.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+CloseButton.Text = "✕"
+CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseButton.Font = Enum.Font.GothamBold
+CloseButton.TextSize = 14
+CloseButton.Parent = TitleBar
+
+-- Content Frame
+local ContentFrame = Instance.new("Frame")
+ContentFrame.Size = UDim2.new(1, -20, 1, -40)
+ContentFrame.Position = UDim2.new(0, 10, 0, 35)
+ContentFrame.BackgroundTransparency = 1
+ContentFrame.Parent = MainFrame
+
+local ScrollFrame = Instance.new("ScrollingFrame")
+ScrollFrame.Size = UDim2.new(1, 0, 1, 0)
+ScrollFrame.BackgroundTransparency = 1
+ScrollFrame.ScrollBarThickness = 6
+ScrollFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 90)
+ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+ScrollFrame.Parent = ContentFrame
+
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.Padding = UDim.new(0, 8)
+UIListLayout.Parent = ScrollFrame
+
+-- Store update functions
 local toggleUpdateFunctions = {}
 
--- Class Selection Section
+-- Class Selection
 local classSection = Instance.new("Frame")
-classSection.Size = UDim2.new(1, 0, 0, 200)
+classSection.Size = UDim2.new(1, 0, 0, 130)
 classSection.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-classSection.BorderSizePixel = 0
-classSection.Active = true
-classSection.Selectable = true
 classSection.Parent = ScrollFrame
 
-local classSectionCorner = Instance.new("UICorner")
-classSectionCorner.CornerRadius = UDim.new(0, 10)
-classSectionCorner.Parent = classSection
-
-local classSectionStroke = Instance.new("UIStroke")
-classSectionStroke.Color = Color3.fromRGB(60, 60, 70)
-classSectionStroke.Thickness = 2
-classSectionStroke.Parent = classSection
-
-local classSectionHeader = Instance.new("TextLabel")
-classSectionHeader.Size = UDim2.new(1, -20, 0, 30)
-classSectionHeader.Position = UDim2.new(0, 10, 0, 5)
-classSectionHeader.BackgroundTransparency = 1
-classSectionHeader.Text = "CLASS SELECTION"
-classSectionHeader.TextColor3 = Color3.fromRGB(100, 200, 255)
-classSectionHeader.Font = Enum.Font.GothamBold
-classSectionHeader.TextSize = 15
-classSectionHeader.TextXAlignment = Enum.TextXAlignment.Left
-classSectionHeader.Parent = classSection
-
--- Create Class Selection Container
 local classContainer = Instance.new("Frame")
-classContainer.Size = UDim2.new(1, -20, 0, 160)
-classContainer.Position = UDim2.new(0, 10, 0, 35)
+classContainer.Size = UDim2.new(1, -10, 0, 120)
+classContainer.Position = UDim2.new(0, 5, 0, 5)
 classContainer.BackgroundTransparency = 1
-classContainer.Active = true
-classContainer.Selectable = true
 classContainer.Parent = classSection
 
--- Create class buttons
 local classButtons = {
     {name = "Medic", color = Color3.fromRGB(220, 60, 60), classType = "medic"},
     {name = "Engineer", color = Color3.fromRGB(60, 180, 220), classType = "engineer"},
@@ -1167,984 +548,288 @@ local classButtons = {
     {name = "Machine Gun", color = Color3.fromRGB(180, 60, 220), classType = "machinegun"}
 }
 
-local buttonWidth = 1
-local buttonHeight = 0.18
-local buttonSpacing = 0.02
-
 for i, classInfo in ipairs(classButtons) do
     local button = Instance.new("TextButton")
-    button.Name = classInfo.name .. "Button"
-    button.Size = UDim2.new(buttonWidth, 0, buttonHeight, 0)
-    button.Position = UDim2.new(0, 0, (buttonHeight + buttonSpacing) * (i - 1), 0)
+    button.Size = UDim2.new(1, 0, 0, 22)
+    button.Position = UDim2.new(0, 0, 0, (i-1)*24)
     button.BackgroundColor3 = classInfo.color
-    button.BackgroundTransparency = 0.1
+    button.BackgroundTransparency = 0.3
     button.Text = classInfo.name
     button.TextColor3 = Color3.fromRGB(255, 255, 255)
     button.Font = Enum.Font.GothamBold
-    button.TextSize = 13
+    button.TextSize = 11
     button.Parent = classContainer
     
-    local buttonCorner = Instance.new("UICorner")
-    buttonCorner.CornerRadius = UDim.new(0, 6)
-    buttonCorner.Parent = button
-    
-    local buttonStroke = Instance.new("UIStroke")
-    buttonStroke.Color = Color3.fromRGB(80, 80, 90)
-    buttonStroke.Thickness = 2
-    buttonStroke.Parent = button
-    
-    -- Add hover effect
-    button.MouseEnter:Connect(function()
-        button.BackgroundTransparency = 0
-    end)
-    
-    button.MouseLeave:Connect(function()
-        button.BackgroundTransparency = 0.1
-    end)
-    
-    -- Add click event
     button.MouseButton1Click:Connect(function()
         selectClass(classInfo.classType)
     end)
 end
 
--- SIMPLIFIED BREAD COOKING SECTION (ONE BUTTON ONLY)
-local breadSection = Instance.new("Frame")
-breadSection.Size = UDim2.new(1, 0, 0, 200) -- Reduced height
-breadSection.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-breadSection.BorderSizePixel = 0
-breadSection.Active = true
-breadSection.Selectable = true
-breadSection.Parent = ScrollFrame
-
-local breadSectionCorner = Instance.new("UICorner")
-breadSectionCorner.CornerRadius = UDim.new(0, 10)
-breadSectionCorner.Parent = breadSection
-
-local breadSectionStroke = Instance.new("UIStroke")
-breadSectionStroke.Color = Color3.fromRGB(60, 60, 70)
-breadSectionStroke.Thickness = 2
-breadSectionStroke.Parent = breadSection
-
-local breadSectionHeader = Instance.new("TextLabel")
-breadSectionHeader.Size = UDim2.new(1, -20, 0, 30)
-breadSectionHeader.Position = UDim2.new(0, 10, 0, 5)
-breadSectionHeader.BackgroundTransparency = 1
-breadSectionHeader.Text = "AUTO BREAD COOKING"
-breadSectionHeader.TextColor3 = Color3.fromRGB(220, 180, 100)
-breadSectionHeader.Font = Enum.Font.GothamBold
-breadSectionHeader.TextSize = 15
-breadSectionHeader.TextXAlignment = Enum.TextXAlignment.Left
-breadSectionHeader.Parent = breadSection
-
--- Create Bread Cooking Container
-local breadContainer = Instance.new("Frame")
-breadContainer.Size = UDim2.new(1, -20, 0, 160) -- Reduced height
-breadContainer.Position = UDim2.new(0, 10, 0, 35)
-breadContainer.BackgroundTransparency = 1
-breadContainer.Active = true
-breadContainer.Selectable = true
-breadContainer.Parent = breadSection
-
--- SINGLE Auto Cook Toggle Button
-local autoCookToggle, updateAutoCookToggle = createToggleButton("Auto Cook Bread (Full Process)", _G.AutoCookEnabled, function(value)
-    toggleAutoCook(value)
-end)
-autoCookToggle.Position = UDim2.new(0, 0, 0, 0)
-autoCookToggle.Parent = breadContainer
-toggleUpdateFunctions["Auto Cook Bread (Full Process)"] = updateAutoCookToggle
-
--- Manual Cook Button
-local manualCookButton = Instance.new("TextButton")
-manualCookButton.Name = "ManualCookButton"
-manualCookButton.Size = UDim2.new(1, 0, 0, 45)
-manualCookButton.Position = UDim2.new(0, 0, 0, 60)
-manualCookButton.BackgroundColor3 = Color3.fromRGB(180, 140, 80)
-manualCookButton.BackgroundTransparency = 0.1
-manualCookButton.Text = "COOK ONCE (TEST)"
-manualCookButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-manualCookButton.Font = Enum.Font.GothamBold
-manualCookButton.TextSize = 14
-manualCookButton.Parent = breadContainer
-
-local manualCookCorner = Instance.new("UICorner")
-manualCookCorner.CornerRadius = UDim.new(0, 8)
-manualCookCorner.Parent = manualCookButton
-
-local manualCookStroke = Instance.new("UIStroke")
-manualCookStroke.Color = Color3.fromRGB(100, 80, 40)
-manualCookStroke.Thickness = 2
-manualCookStroke.Parent = manualCookButton
-
--- Add hover effect to manual cook button
-manualCookButton.MouseEnter:Connect(function()
-    manualCookButton.BackgroundTransparency = 0
-end)
-
-manualCookButton.MouseLeave:Connect(function()
-    manualCookButton.BackgroundTransparency = 0.1
-end)
-
--- Manual cook button click event
-manualCookButton.MouseButton1Click:Connect(function()
-    cookBread()
-end)
-
--- Info label
-local breadInfoLabel = Instance.new("TextLabel")
-breadInfoLabel.Size = UDim2.new(1, 0, 0, 80)
-breadInfoLabel.Position = UDim2.new(0, 0, 0, 120)
-breadInfoLabel.BackgroundTransparency = 1
-breadInfoLabel.Text = "Process (Auto Loop):\n1. Activate nearby 'Take Dough' prompt\n2. Auto-equip dough\n3. Turn dough to bread (remote)\n4. Cook bread (remote)\n5. Loop every 0.5 seconds"
-breadInfoLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
-breadInfoLabel.Font = Enum.Font.Gotham
-breadInfoLabel.TextSize = 11
-breadInfoLabel.TextXAlignment = Enum.TextXAlignment.Left
-breadInfoLabel.TextYAlignment = Enum.TextYAlignment.Top
-breadInfoLabel.Parent = breadContainer
-
--- ... [Rest of the script remains the same, just removed the old auto-equip toggles]
-
--- NPC Settings Section
-local npcSection = Instance.new("Frame")
-npcSection.Size = UDim2.new(1, 0, 0, 170)
-npcSection.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-npcSection.BorderSizePixel = 0
-npcSection.Active = true
-npcSection.Selectable = true
-npcSection.Parent = ScrollFrame
-
-local npcSectionCorner = Instance.new("UICorner")
-npcSectionCorner.CornerRadius = UDim.new(0, 10)
-npcSectionCorner.Parent = npcSection
-
-local npcSectionStroke = Instance.new("UIStroke")
-npcSectionStroke.Color = Color3.fromRGB(60, 60, 70)
-npcSectionStroke.Thickness = 2
-npcSectionStroke.Parent = npcSection
-
-local npcSectionHeader = Instance.new("TextLabel")
-npcSectionHeader.Size = UDim2.new(1, -20, 0, 30)
-npcSectionHeader.Position = UDim2.new(0, 10, 0, 5)
-npcSectionHeader.BackgroundTransparency = 1
-npcSectionHeader.Text = "NPC HITBOX SETTINGS"
-npcSectionHeader.TextColor3 = Color3.fromRGB(255, 150, 0)
-npcSectionHeader.Font = Enum.Font.GothamBold
-npcSectionHeader.TextSize = 15
-npcSectionHeader.TextXAlignment = Enum.TextXAlignment.Left
-npcSectionHeader.Parent = npcSection
-
--- Create NPC Settings Container
-local npcContainer = Instance.new("Frame")
-npcContainer.Size = UDim2.new(1, -20, 0, 130)
-npcContainer.Position = UDim2.new(0, 10, 0, 35)
-npcContainer.BackgroundTransparency = 1
-npcContainer.Active = true
-npcContainer.Selectable = true
-npcContainer.Parent = npcSection
-
-local npcLayout = Instance.new("UIListLayout")
-npcLayout.Padding = UDim.new(0, 10)
-npcLayout.Parent = npcContainer
-
--- Function to create number input with text box
-local function createNumberInput(label, min, max, default, callback)
-    local container = Instance.new("Frame")
-    container.Size = UDim2.new(1, 0, 0, 70)
-    container.BackgroundTransparency = 1
-    
-    local labelText = Instance.new("TextLabel")
-    labelText.Size = UDim2.new(1, 0, 0, 20)
-    labelText.BackgroundTransparency = 1
-    labelText.Text = label
-    labelText.TextColor3 = Color3.fromRGB(200, 200, 200)
-    labelText.Font = Enum.Font.GothamMedium
-    labelText.TextSize = 13
-    labelText.TextXAlignment = Enum.TextXAlignment.Left
-    labelText.Parent = container
-    
-    local inputFrame = Instance.new("Frame")
-    inputFrame.Size = UDim2.new(1, 0, 0, 40)
-    inputFrame.Position = UDim2.new(0, 0, 0, 25)
-    inputFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
-    inputFrame.BorderSizePixel = 0
-    inputFrame.Parent = container
-    
-    local inputCorner = Instance.new("UICorner")
-    inputCorner.CornerRadius = UDim.new(0, 8)
-    inputCorner.Parent = inputFrame
-    
-    local inputStroke = Instance.new("UIStroke")
-    inputStroke.Color = Color3.fromRGB(60, 60, 70)
-    inputStroke.Thickness = 2
-    inputStroke.Parent = inputFrame
-    
-    local textBox = Instance.new("TextBox")
-    textBox.Name = "ValueInput"
-    textBox.Size = UDim2.new(0.6, 0, 1, 0)
-    textBox.Position = UDim2.new(0.2, 0, 0, 0)
-    textBox.BackgroundTransparency = 1
-    textBox.Text = tostring(default)
-    textBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-    textBox.Font = Enum.Font.Gotham
-    textBox.TextSize = 14
-    textBox.TextXAlignment = Enum.TextXAlignment.Center
-    textBox.ClearTextOnFocus = false
-    textBox.Parent = inputFrame
-    
-    -- Increment/Decrement buttons
-    local minusButton = Instance.new("TextButton")
-    minusButton.Name = "MinusButton"
-    minusButton.Size = UDim2.new(0, 40, 1, 0)
-    minusButton.Position = UDim2.new(0, 0, 0, 0)
-    minusButton.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
-    minusButton.BackgroundTransparency = 0.3
-    minusButton.Text = "-"
-    minusButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    minusButton.Font = Enum.Font.GothamBold
-    minusButton.TextSize = 18
-    minusButton.Parent = inputFrame
-    
-    local minusCorner = Instance.new("UICorner")
-    minusCorner.CornerRadius = UDim.new(0, 8)
-    minusCorner.Parent = minusButton
-    
-    local plusButton = Instance.new("TextButton")
-    plusButton.Name = "PlusButton"
-    plusButton.Size = UDim2.new(0, 40, 1, 0)
-    plusButton.Position = UDim2.new(1, -40, 0, 0)
-    plusButton.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
-    plusButton.BackgroundTransparency = 0.3
-    plusButton.Text = "+"
-    plusButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    plusButton.Font = Enum.Font.GothamBold
-    plusButton.TextSize = 18
-    plusButton.Parent = inputFrame
-    
-    local plusCorner = Instance.new("UICorner")
-    plusCorner.CornerRadius = UDim.new(0, 8)
-    plusCorner.Parent = plusButton
-    
-    -- Function to validate and update value
-    local function updateValue(newValue)
-        local num = tonumber(newValue)
-        if num then
-            num = math.clamp(num, min, max)
-            textBox.Text = tostring(num)
-            callback(num)
-        else
-            textBox.Text = tostring(default)
+-- Head Size Input
+local hitboxSizeInput = createNumberInput("Head Scale (10-500)", 10, 500, _G.NPCHeadSize, function(value)
+    _G.NPCHeadSize = value
+    if _G.HitboxAllEnabled then
+        for npc, _ in pairs(TrackedNPCs) do
+            scaleNPCHead(npc, value)
         end
     end
-    
-    -- Text box events
-    textBox.FocusLost:Connect(function(enterPressed)
-        updateValue(textBox.Text)
-    end)
-    
-    -- Button events
-    minusButton.MouseButton1Click:Connect(function()
-        local current = tonumber(textBox.Text) or default
-        updateValue(current - 1)
-    end)
-    
-    plusButton.MouseButton1Click:Connect(function()
-        local current = tonumber(textBox.Text) or default
-        updateValue(current + 1)
-    end)
-    
-    return container
-end
-
--- NPC Hitbox Size Input (CHANGED TO 1000)
-local npcInput = createNumberInput("Head Size (1-1000)", 1, 1000, _G.NPCHeadSize, function(value)
-    _G.NPCHeadSize = value
 end)
-npcInput.Parent = npcContainer
+hitboxSizeInput.Parent = ScrollFrame
+
+-- Master Toggle
+local masterToggle, updateMasterToggle = createToggleButton("Enable Features", not _G.Disabled, function(value)
+    _G.Disabled = not value
+end)
+masterToggle.Parent = ScrollFrame
+toggleUpdateFunctions["Enable Features"] = updateMasterToggle
 
 -- NPC Detection Toggle
 local npcToggle, updateNPCToggle = createToggleButton("NPC Detection", _G.NPCEnabled, function(value)
     _G.NPCEnabled = value
+    if not value then
+        for npc, _ in pairs(TrackedNPCs) do
+            removeESP(npc)
+            resetNPCHead(npc)
+        end
+        TrackedNPCs = {}
+        ESPInstances = {}
+        HeadScaleInstances = {}
+    end
 end)
-npcToggle.Parent = npcContainer
+npcToggle.Parent = ScrollFrame
 toggleUpdateFunctions["NPC Detection"] = updateNPCToggle
 
--- Enable Hitboxes Toggle
-local masterToggle, updateMasterToggle = createToggleButton("Enable Hitboxes", not _G.Disabled, function(value)
-    _G.Disabled = not value
+-- Hitbox All Enemies Toggle
+local hitboxAllToggle, updateHitboxAllToggle = createToggleButton("Hitbox All Enemies", _G.HitboxAllEnabled, function(value)
+    _G.HitboxAllEnabled = value
+    if value then
+        for npc, _ in pairs(TrackedNPCs) do
+            scaleNPCHead(npc, _G.NPCHeadSize)
+        end
+    else
+        resetAllHeadScales()
+    end
 end)
-masterToggle.Parent = npcContainer
-toggleUpdateFunctions["Enable Hitboxes"] = updateMasterToggle
-
--- ESP Settings Section
-local espSection = Instance.new("Frame")
-espSection.Size = UDim2.new(1, 0, 0, 150)
-espSection.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-espSection.BorderSizePixel = 0
-espSection.Active = true
-espSection.Selectable = true
-espSection.Parent = ScrollFrame
-
-local espSectionCorner = Instance.new("UICorner")
-espSectionCorner.CornerRadius = UDim.new(0, 10)
-espSectionCorner.Parent = espSection
-
-local espSectionStroke = Instance.new("UIStroke")
-espSectionStroke.Color = Color3.fromRGB(60, 60, 70)
-espSectionStroke.Thickness = 2
-espSectionStroke.Parent = espSection
-
-local espSectionHeader = Instance.new("TextLabel")
-espSectionHeader.Size = UDim2.new(1, -20, 0, 30)
-espSectionHeader.Position = UDim2.new(0, 10, 0, 5)
-espSectionHeader.BackgroundTransparency = 1
-espSectionHeader.Text = "NPC ESP SETTINGS"
-espSectionHeader.TextColor3 = Color3.fromRGB(0, 200, 255)
-espSectionHeader.Font = Enum.Font.GothamBold
-espSectionHeader.TextSize = 15
-espSectionHeader.TextXAlignment = Enum.TextXAlignment.Left
-espSectionHeader.Parent = espSection
-
--- Create ESP Settings Container
-local espContainer = Instance.new("Frame")
-espContainer.Size = UDim2.new(1, -20, 0, 110)
-espContainer.Position = UDim2.new(0, 10, 0, 35)
-espContainer.BackgroundTransparency = 1
-espContainer.Active = true
-espContainer.Selectable = true
-espContainer.Parent = espSection
-
-local espLayout = Instance.new("UIListLayout")
-espLayout.Padding = UDim.new(0, 10)
-espLayout.Parent = espContainer
+hitboxAllToggle.Parent = ScrollFrame
+toggleUpdateFunctions["Hitbox All Enemies"] = updateHitboxAllToggle
 
 -- ESP Toggle
-local espToggle, updateESPToggle = createToggleButton("NPC ESP", _G.ESPEnabled, function(value)
-    toggleESP(value)
+local espToggle, updateESPToggle = createToggleButton("Mini Health ESP", _G.ESPEnabled, function(value)
+    _G.ESPEnabled = value
+    if value then
+        for npc, _ in pairs(TrackedNPCs) do
+            createESP(npc)
+        end
+    else
+        for npc, esp in pairs(ESPInstances) do
+            esp:Destroy()
+        end
+        ESPInstances = {}
+    end
 end)
-espToggle.Parent = espContainer
-toggleUpdateFunctions["NPC ESP"] = updateESPToggle
+espToggle.Parent = ScrollFrame
+toggleUpdateFunctions["Mini Health ESP"] = updateESPToggle
 
--- Aimbot Settings Section
-local aimbotSection = Instance.new("Frame")
-aimbotSection.Size = UDim2.new(1, 0, 0, 420) -- Increased for prediction controls
-aimbotSection.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-aimbotSection.BorderSizePixel = 0
-aimbotSection.Active = true
-aimbotSection.Selectable = true
-aimbotSection.Parent = ScrollFrame
+-- Aimbot FOV Input
+local aimbotFOVInput = createNumberInput("Aimbot FOV (20-360)", 20, 360, _G.AimbotFOV, function(value)
+    _G.AimbotFOV = value
+end)
+aimbotFOVInput.Parent = ScrollFrame
 
-local aimbotSectionCorner = Instance.new("UICorner")
-aimbotSectionCorner.CornerRadius = UDim.new(0, 10)
-aimbotSectionCorner.Parent = aimbotSection
+-- Aimbot Smoothness Input
+local aimbotSmoothInput = createNumberInput("Aimbot Smoothness (0.1-1)", 0.1, 1, _G.AimbotSmoothness, function(value)
+    _G.AimbotSmoothness = value
+end)
+aimbotSmoothInput.Parent = ScrollFrame
 
-local aimbotSectionStroke = Instance.new("UIStroke")
-aimbotSectionStroke.Color = Color3.fromRGB(60, 60, 70)
-aimbotSectionStroke.Thickness = 2
-aimbotSectionStroke.Parent = aimbotSection
-
-local aimbotSectionHeader = Instance.new("TextLabel")
-aimbotSectionHeader.Size = UDim2.new(1, -20, 0, 30)
-aimbotSectionHeader.Position = UDim2.new(0, 10, 0, 5)
-aimbotSectionHeader.BackgroundTransparency = 1
-aimbotSectionHeader.Text = "AIMBOT SETTINGS"
-aimbotSectionHeader.TextColor3 = Color3.fromRGB(255, 50, 50)
-aimbotSectionHeader.Font = Enum.Font.GothamBold
-aimbotSectionHeader.TextSize = 15
-aimbotSectionHeader.TextXAlignment = Enum.TextXAlignment.Left
-aimbotSectionHeader.Parent = aimbotSection
-
--- Create Aimbot Settings Container
-local aimbotContainer = Instance.new("Frame")
-aimbotContainer.Size = UDim2.new(1, -20, 0, 380)
-aimbotContainer.Position = UDim2.new(0, 10, 0, 35)
-aimbotContainer.BackgroundTransparency = 1
-aimbotContainer.Active = true
-aimbotContainer.Selectable = true
-aimbotContainer.Parent = aimbotSection
-
-local aimbotLayout = Instance.new("UIListLayout")
-aimbotLayout.Padding = UDim.new(0, 15)
-aimbotLayout.Parent = aimbotContainer
+-- Aimbot Distance Input
+local aimbotDistanceInput = createNumberInput("Max Distance (50-2000)", 50, 2000, _G.AimbotMaxDistance, function(value)
+    _G.AimbotMaxDistance = value
+end)
+aimbotDistanceInput.Parent = ScrollFrame
 
 -- Aimbot Toggle
-local aimbotToggle, updateAimbotToggle = createToggleButton("Aimbot Enabled", _G.AimbotEnabled, function(value)
-    toggleAimbot(value)
+local aimbotToggle, updateAimbotToggle = createToggleButton("Aimbot", _G.AimbotEnabled, function(value)
+    _G.AimbotEnabled = value
 end)
-aimbotToggle.Parent = aimbotContainer
-toggleUpdateFunctions["Aimbot Enabled"] = updateAimbotToggle
+aimbotToggle.Parent = ScrollFrame
+toggleUpdateFunctions["Aimbot"] = updateAimbotToggle
 
--- Aimbot Wall Check Toggle
+-- Wall Check Toggle
 local wallCheckToggle, updateWallCheckToggle = createToggleButton("Wall Check", _G.AimbotWallCheck, function(value)
     _G.AimbotWallCheck = value
 end)
-wallCheckToggle.Parent = aimbotContainer
+wallCheckToggle.Parent = ScrollFrame
 toggleUpdateFunctions["Wall Check"] = updateWallCheckToggle
 
--- Aimbot Auto Shoot Toggle
+-- Auto Shoot Toggle
 local autoShootToggle, updateAutoShootToggle = createToggleButton("Auto Shoot", _G.AimbotAutoShoot, function(value)
     _G.AimbotAutoShoot = value
 end)
-autoShootToggle.Parent = aimbotContainer
+autoShootToggle.Parent = ScrollFrame
 toggleUpdateFunctions["Auto Shoot"] = updateAutoShootToggle
 
--- Show FOV Circle Toggle
-local showFOVToggle, updateFOVToggle = createToggleButton("Show FOV Circle", _G.AimbotShowFOV, function(value)
-    _G.AimbotShowFOV = value
-    updateFOVCircle()
+-- Auto Cook Delay Input
+local autoCookDelayInput = createNumberInput("Auto Cook Delay (0.1-5s)", 0.1, 5, _G.AutoCookDelay, function(value)
+    _G.AutoCookDelay = value
 end)
-showFOVToggle.Parent = aimbotContainer
-toggleUpdateFunctions["Show FOV Circle"] = updateFOVToggle
+autoCookDelayInput.Parent = ScrollFrame
 
--- Aimbot Prediction Toggle
-local predictionToggle, updatePredictionToggle = createToggleButton("Movement Prediction", _G.AimbotPrediction, function(value)
-    _G.AimbotPrediction = value
-end)
-predictionToggle.Parent = aimbotContainer
-toggleUpdateFunctions["Movement Prediction"] = updatePredictionToggle
-
--- Function to create dropdown for aimbot target part
-local function createAimbotDropdown(label, options, default, callback)
-    local container = Instance.new("Frame")
-    container.Size = UDim2.new(1, 0, 0, 70)
-    container.BackgroundTransparency = 1
-    
-    local labelText = Instance.new("TextLabel")
-    labelText.Size = UDim2.new(1, 0, 0, 20)
-    labelText.BackgroundTransparency = 1
-    labelText.Text = label
-    labelText.TextColor3 = Color3.fromRGB(200, 200, 200)
-    labelText.Font = Enum.Font.GothamMedium
-    labelText.TextSize = 13
-    labelText.TextXAlignment = Enum.TextXAlignment.Left
-    labelText.Parent = container
-    
-    local dropdownFrame = Instance.new("Frame")
-    dropdownFrame.Size = UDim2.new(1, 0, 0, 40)
-    dropdownFrame.Position = UDim2.new(0, 0, 0, 25)
-    dropdownFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
-    dropdownFrame.BorderSizePixel = 0
-    dropdownFrame.Parent = container
-    
-    local dropdownCorner = Instance.new("UICorner")
-    dropdownCorner.CornerRadius = UDim.new(0, 8)
-    dropdownCorner.Parent = dropdownFrame
-    
-    local dropdownStroke = Instance.new("UIStroke")
-    dropdownStroke.Color = Color3.fromRGB(60, 60, 70)
-    dropdownStroke.Thickness = 2
-    dropdownStroke.Parent = dropdownFrame
-    
-    local selectedText = Instance.new("TextLabel")
-    selectedText.Size = UDim2.new(0.8, 0, 1, 0)
-    selectedText.Position = UDim2.new(0.1, 0, 0, 0)
-    selectedText.BackgroundTransparency = 1
-    selectedText.Text = default
-    selectedText.TextColor3 = Color3.fromRGB(255, 255, 255)
-    selectedText.Font = Enum.Font.Gotham
-    selectedText.TextSize = 14
-    selectedText.TextXAlignment = Enum.TextXAlignment.Left
-    selectedText.Parent = dropdownFrame
-    
-    local dropdownButton = Instance.new("TextButton")
-    dropdownButton.Size = UDim2.new(1, 0, 1, 0)
-    dropdownButton.BackgroundTransparency = 1
-    dropdownButton.Text = ""
-    dropdownButton.Parent = dropdownFrame
-    
-    local arrow = Instance.new("TextLabel")
-    arrow.Size = UDim2.new(0, 20, 0, 20)
-    arrow.Position = UDim2.new(1, -25, 0.5, -10)
-    arrow.BackgroundTransparency = 1
-    arrow.Text = "▼"
-    arrow.TextColor3 = Color3.fromRGB(180, 180, 180)
-    arrow.Font = Enum.Font.Gotham
-    arrow.TextSize = 12
-    arrow.Parent = dropdownFrame
-    
-    -- Dropdown options
-    local optionsFrame = Instance.new("Frame")
-    optionsFrame.Size = UDim2.new(1, 0, 0, 80)
-    optionsFrame.Position = UDim2.new(0, 0, 1, 5)
-    optionsFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
-    optionsFrame.BorderSizePixel = 0
-    optionsFrame.Visible = false
-    optionsFrame.ZIndex = 10
-    optionsFrame.Parent = dropdownFrame
-    
-    local optionsCorner = Instance.new("UICorner")
-    optionsCorner.CornerRadius = UDim.new(0, 8)
-    optionsCorner.Parent = optionsFrame
-    
-    local optionsStroke = Instance.new("UIStroke")
-    optionsStroke.Color = Color3.fromRGB(60, 60, 70)
-    optionsStroke.Thickness = 2
-    optionsStroke.Parent = optionsFrame
-    
-    local optionsLayout = Instance.new("UIListLayout")
-    optionsLayout.Padding = UDim.new(0, 2)
-    optionsLayout.Parent = optionsFrame
-    
-    -- Create option buttons
-    for _, option in ipairs(options) do
-        local optionButton = Instance.new("TextButton")
-        optionButton.Size = UDim2.new(1, -10, 0, 25)
-        optionButton.Position = UDim2.new(0, 5, 0, 0)
-        optionButton.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
-        optionButton.Text = option
-        optionButton.TextColor3 = Color3.fromRGB(220, 220, 220)
-        optionButton.Font = Enum.Font.Gotham
-        optionButton.TextSize = 12
-        optionButton.AutoButtonColor = false
-        optionButton.Parent = optionsFrame
-        
-        local optionCorner = Instance.new("UICorner")
-        optionCorner.CornerRadius = UDim.new(0, 4)
-        optionCorner.Parent = optionButton
-        
-        optionButton.MouseEnter:Connect(function()
-            optionButton.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
-        end)
-        
-        optionButton.MouseLeave:Connect(function()
-            optionButton.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
-        end)
-        
-        optionButton.MouseButton1Click:Connect(function()
-            selectedText.Text = option
-            callback(option)
-            optionsFrame.Visible = false
-        end)
+-- Auto Cook Toggle
+local autoCookToggle, updateAutoCookToggle = createToggleButton("Auto Cook Bread", _G.AutoCookBread, function(value)
+    _G.AutoCookBread = value
+    if value then
+        startAutoCook()
+    else
+        cooking = false
     end
-    
-    dropdownButton.MouseButton1Click:Connect(function()
-        optionsFrame.Visible = not optionsFrame.Visible
-    end)
-    
-    -- Close dropdown when clicking elsewhere
-    UserInputService.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            local mousePos = UserInputService:GetMouseLocation()
-            local framePos = dropdownFrame.AbsolutePosition
-            local frameSize = dropdownFrame.AbsoluteSize
-            
-            if mousePos.X < framePos.X or mousePos.X > framePos.X + frameSize.X or
-               mousePos.Y < framePos.Y or mousePos.Y > framePos.Y + frameSize.Y + (optionsFrame.Visible and 85 or 0) then
-                optionsFrame.Visible = false
-            end
-        end
-    end)
-    
-    return container
-end
-
--- Aimbot Target Part Dropdown
-local aimbotDropdown = createAimbotDropdown("Aimbot Target", {"Head", "Torso"}, _G.AimbotTargetPart, function(value)
-    _G.AimbotTargetPart = value
 end)
-aimbotDropdown.Parent = aimbotContainer
+autoCookToggle.Parent = ScrollFrame
+toggleUpdateFunctions["Auto Cook Bread"] = updateAutoCookToggle
 
--- Aimbot FOV Input
-local aimbotFOVInput = createNumberInput("Aimbot FOV (10-360)", 10, 360, _G.AimbotFOV, function(value)
-    _G.AimbotFOV = value
-    updateFOVCircle()
+local manualCookButton = Instance.new("TextButton")
+manualCookButton.Size = UDim2.new(1, 0, 0, 30)
+manualCookButton.BackgroundColor3 = Color3.fromRGB(180, 140, 80)
+manualCookButton.BackgroundTransparency = 0.3
+manualCookButton.Text = "COOK BREAD ONCE"
+manualCookButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+manualCookButton.Font = Enum.Font.GothamBold
+manualCookButton.TextSize = 12
+manualCookButton.Parent = ScrollFrame
+
+manualCookButton.MouseButton1Click:Connect(function()
+    cookBread()
 end)
-aimbotFOVInput.Parent = aimbotContainer
 
--- Aimbot Smoothness Input
-local aimbotSmoothInput = createNumberInput("Aimbot Smoothness (0.1-0.9)", 0.1, 0.9, _G.AimbotSmoothness, function(value)
-    _G.AimbotSmoothness = value
-end)
-aimbotSmoothInput.Parent = aimbotContainer
-
--- Aimbot Prediction Strength Input
-local predictionStrengthInput = createNumberInput("Prediction Strength (0-1)", 0, 1, _G.AimbotPredictionStrength, function(value)
-    _G.AimbotPredictionStrength = value
-end)
-predictionStrengthInput.Parent = aimbotContainer
-
--- Aimbot Max Distance Input
-local aimbotDistanceInput = createNumberInput("Max Distance (10-2000)", 10, 2000, _G.AimbotMaxDistance, function(value)
-    _G.AimbotMaxDistance = value
-end)
-aimbotDistanceInput.Parent = aimbotContainer
-
--- Instant Interact Section
-local interactSection = Instance.new("Frame")
-interactSection.Size = UDim2.new(1, 0, 0, 150)
-interactSection.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-interactSection.BorderSizePixel = 0
-interactSection.Active = true
-interactSection.Selectable = true
-interactSection.Parent = ScrollFrame
-
-local interactSectionCorner = Instance.new("UICorner")
-interactSectionCorner.CornerRadius = UDim.new(0, 10)
-interactSectionCorner.Parent = interactSection
-
-local interactSectionStroke = Instance.new("UIStroke")
-interactSectionStroke.Color = Color3.fromRGB(60, 60, 70)
-interactSectionStroke.Thickness = 2
-interactSectionStroke.Parent = interactSection
-
-local interactSectionHeader = Instance.new("TextLabel")
-interactSectionHeader.Size = UDim2.new(1, -20, 0, 30)
-interactSectionHeader.Position = UDim2.new(0, 10, 0, 5)
-interactSectionHeader.BackgroundTransparency = 1
-interactSectionHeader.Text = "INSTANT INTERACT"
-interactSectionHeader.TextColor3 = Color3.fromRGB(100, 255, 100)
-interactSectionHeader.Font = Enum.Font.GothamBold
-interactSectionHeader.TextSize = 15
-interactSectionHeader.TextXAlignment = Enum.TextXAlignment.Left
-interactSectionHeader.Parent = interactSection
-
--- Create Interact Settings Container
-local interactContainer = Instance.new("Frame")
-interactContainer.Size = UDim2.new(1, -20, 0, 110)
-interactContainer.Position = UDim2.new(0, 10, 0, 35)
-interactContainer.BackgroundTransparency = 1
-interactContainer.Active = true
-interactContainer.Selectable = true
-interactContainer.Parent = interactSection
-
-local interactLayout = Instance.new("UIListLayout")
-interactLayout.Padding = UDim.new(0, 10)
-interactLayout.Parent = interactContainer
-
--- Instant Interact Toggle
-local interactToggle, updateInteractToggle = createToggleButton("Instant Interact", _G.InstantInteractEnabled, function(value)
-    toggleInstantInteract(value)
-end)
-interactToggle.Parent = interactContainer
-toggleUpdateFunctions["Instant Interact"] = updateInteractToggle
-
--- Performance Settings Section
-local perfSection = Instance.new("Frame")
-perfSection.Size = UDim2.new(1, 0, 0, 170)
-perfSection.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-perfSection.BorderSizePixel = 0
-perfSection.Active = true
-perfSection.Selectable = true
-perfSection.Parent = ScrollFrame
-
-local perfSectionCorner = Instance.new("UICorner")
-perfSectionCorner.CornerRadius = UDim.new(0, 10)
-perfSectionCorner.Parent = perfSection
-
-local perfSectionStroke = Instance.new("UIStroke")
-perfSectionStroke.Color = Color3.fromRGB(60, 60, 70)
-perfSectionStroke.Thickness = 2
-perfSectionStroke.Parent = perfSection
-
-local perfSectionHeader = Instance.new("TextLabel")
-perfSectionHeader.Size = UDim2.new(1, -20, 0, 30)
-perfSectionHeader.Position = UDim2.new(0, 10, 0, 5)
-perfSectionHeader.BackgroundTransparency = 1
-perfSectionHeader.Text = "PERFORMANCE SETTINGS"
-perfSectionHeader.TextColor3 = Color3.fromRGB(150, 150, 255)
-perfSectionHeader.Font = Enum.Font.GothamBold
-perfSectionHeader.TextSize = 15
-perfSectionHeader.TextXAlignment = Enum.TextXAlignment.Left
-perfSectionHeader.Parent = perfSection
-
--- Create Performance Settings Container
-local perfContainer = Instance.new("Frame")
-perfContainer.Size = UDim2.new(1, -20, 0, 130)
-perfContainer.Position = UDim2.new(0, 10, 0, 35)
-perfContainer.BackgroundTransparency = 1
-perfContainer.Active = true
-perfContainer.Selectable = true
-perfContainer.Parent = perfSection
-
-local perfLayout = Instance.new("UIListLayout")
-perfLayout.Padding = UDim.new(0, 10)
-perfLayout.Parent = perfContainer
-
--- Performance: ESP Update Rate
-local espRateInput = createNumberInput("ESP Update Rate (0.05-1)", 0.05, 1, _G.ESPUpdateRate, function(value)
-    _G.ESPUpdateRate = value
-end)
-espRateInput.Parent = perfContainer
-
--- Performance: Aimbot Update Rate
-local aimbotRateInput = createNumberInput("Aimbot Update Rate (0.01-0.1)", 0.01, 0.1, _G.AimbotUpdateRate, function(value)
-    _G.AimbotUpdateRate = value
-end)
-aimbotRateInput.Parent = perfContainer
-
--- Info Section
-local infoSection = Instance.new("Frame")
-infoSection.Size = UDim2.new(1, 0, 0, 170)
-infoSection.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-infoSection.BorderSizePixel = 0
-infoSection.Active = true
-infoSection.Selectable = true
-infoSection.Parent = ScrollFrame
-
-local infoSectionCorner = Instance.new("UICorner")
-infoSectionCorner.CornerRadius = UDim.new(0, 10)
-infoSectionCorner.Parent = infoSection
-
-local infoSectionStroke = Instance.new("UIStroke")
-infoSectionStroke.Color = Color3.fromRGB(60, 60, 70)
-infoSectionStroke.Thickness = 2
-infoSectionStroke.Parent = infoSection
-
-local infoSectionHeader = Instance.new("TextLabel")
-infoSectionHeader.Size = UDim2.new(1, -20, 0, 30)
-infoSectionHeader.Position = UDim2.new(0, 10, 0, 5)
-infoSectionHeader.BackgroundTransparency = 1
-infoSectionHeader.Text = "CONTROLS & INFO"
-infoSectionHeader.TextColor3 = Color3.fromRGB(255, 255, 200)
-infoSectionHeader.Font = Enum.Font.GothamBold
-infoSectionHeader.TextSize = 15
-infoSectionHeader.TextXAlignment = Enum.TextXAlignment.Left
-infoSectionHeader.Parent = infoSection
-
-local infoText = Instance.new("TextLabel")
-infoText.Size = UDim2.new(1, -20, 0, 130)
-infoText.Position = UDim2.new(0, 10, 0, 35)
-infoText.BackgroundTransparency = 1
-infoText.Text = "INSERT: Toggle GUI\nRIGHT SHIFT: Toggle All\nMouse Wheel: Scroll GUI\n\nEnhanced Aimbot:\n• Predicts enemy movement\n• Better wall check accuracy\n• Dynamic smoothness\n• Faster update rate (0.03s)"
-infoText.TextColor3 = Color3.fromRGB(200, 200, 200)
-infoText.Font = Enum.Font.Gotham
-infoText.TextSize = 12
-infoText.TextXAlignment = Enum.TextXAlignment.Left
-infoText.TextYAlignment = Enum.TextYAlignment.Top
-infoText.Parent = infoSection
-
--- Reset Button Section
-local resetSection = Instance.new("Frame")
-resetSection.Size = UDim2.new(1, 0, 0, 70)
-resetSection.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-resetSection.BorderSizePixel = 0
-resetSection.Active = true
-resetSection.Selectable = true
-resetSection.Parent = ScrollFrame
-
-local resetSectionCorner = Instance.new("UICorner")
-resetSectionCorner.CornerRadius = UDim.new(0, 10)
-resetSectionCorner.Parent = resetSection
-
-local resetSectionStroke = Instance.new("UIStroke")
-resetSectionStroke.Color = Color3.fromRGB(60, 60, 70)
-resetSectionStroke.Thickness = 2
-resetSectionStroke.Parent = resetSection
-
+-- Reset Button
 local resetButton = Instance.new("TextButton")
-resetButton.Size = UDim2.new(1, -20, 0, 45)
-resetButton.Position = UDim2.new(0, 10, 0, 12)
+resetButton.Size = UDim2.new(1, 0, 0, 30)
 resetButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
 resetButton.Text = "RESET TO DEFAULTS"
 resetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 resetButton.Font = Enum.Font.GothamBold
-resetButton.TextSize = 14
-resetButton.Parent = resetSection
-
-local resetButtonCorner = Instance.new("UICorner")
-resetButtonCorner.CornerRadius = UDim.new(0, 8)
-resetButtonCorner.Parent = resetButton
-
-local resetButtonStroke = Instance.new("UIStroke")
-resetButtonStroke.Color = Color3.fromRGB(100, 30, 30)
-resetButtonStroke.Thickness = 2
-resetButtonStroke.Parent = resetButton
+resetButton.TextSize = 12
+resetButton.Parent = ScrollFrame
 
 resetButton.MouseButton1Click:Connect(function()
-    _G.NPCHeadSize = 20
+    _G.NPCHeadSize = 100
     _G.Disabled = false
     _G.NPCEnabled = true
     _G.ESPEnabled = false
-    _G.InstantInteractEnabled = false
     _G.AimbotEnabled = false
-    _G.AimbotTargetPart = "Head"
+    _G.HitboxAllEnabled = false
     _G.AimbotFOV = 100
-    _G.AimbotSmoothness = 0.2
-    _G.AimbotWallCheck = true
+    _G.AimbotSmoothness = 0.3
+    _G.AimbotWallCheck = false
     _G.AimbotAutoShoot = false
     _G.AimbotMaxDistance = 500
-    _G.AimbotShowFOV = false
-    _G.AimbotPrediction = true
-    _G.AimbotPredictionStrength = 0.3
-    _G.ESPUpdateRate = 0.1
-    _G.AimbotUpdateRate = 0.03
-    _G.AutoCookEnabled = false
+    _G.AutoCookBread = false
+    _G.AutoCookDelay = 0.3
     
-    -- Update number inputs
-    local npcTextBox = npcInput:FindFirstChild("ValueInput", true)
-    if npcTextBox then npcTextBox.Text = "20" end
-    
-    -- Update toggle buttons
-    if toggleUpdateFunctions["Enable Hitboxes"] then toggleUpdateFunctions["Enable Hitboxes"](true) end
+    -- Reset GUI toggles
+    if toggleUpdateFunctions["Enable Features"] then toggleUpdateFunctions["Enable Features"](true) end
     if toggleUpdateFunctions["NPC Detection"] then toggleUpdateFunctions["NPC Detection"](true) end
-    if toggleUpdateFunctions["NPC ESP"] then toggleUpdateFunctions["NPC ESP"](false) end
-    if toggleUpdateFunctions["Instant Interact"] then toggleUpdateFunctions["Instant Interact"](false) end
-    if toggleUpdateFunctions["Aimbot Enabled"] then toggleUpdateFunctions["Aimbot Enabled"](false) end
-    if toggleUpdateFunctions["Wall Check"] then toggleUpdateFunctions["Wall Check"](true) end
+    if toggleUpdateFunctions["Hitbox All Enemies"] then toggleUpdateFunctions["Hitbox All Enemies"](false) end
+    if toggleUpdateFunctions["Mini Health ESP"] then toggleUpdateFunctions["Mini Health ESP"](false) end
+    if toggleUpdateFunctions["Aimbot"] then toggleUpdateFunctions["Aimbot"](false) end
+    if toggleUpdateFunctions["Wall Check"] then toggleUpdateFunctions["Wall Check"](false) end
     if toggleUpdateFunctions["Auto Shoot"] then toggleUpdateFunctions["Auto Shoot"](false) end
-    if toggleUpdateFunctions["Show FOV Circle"] then toggleUpdateFunctions["Show FOV Circle"](false) end
-    if toggleUpdateFunctions["Movement Prediction"] then toggleUpdateFunctions["Movement Prediction"](true) end
-    if toggleUpdateFunctions["Auto Cook Bread (Full Process)"] then toggleUpdateFunctions["Auto Cook Bread (Full Process)"](false) end
+    if toggleUpdateFunctions["Auto Cook Bread"] then toggleUpdateFunctions["Auto Cook Bread"](false) end
     
-    -- Apply changes
-    toggleESP(false)
-    toggleInstantInteract(false)
-    toggleAimbot(false)
-    toggleAutoCook(false)
-    updateFOVCircle()
-    
-    print("Settings reset to defaults!")
+    -- Clear everything
+    resetAllHeadScales()
+    for npc, esp in pairs(ESPInstances) do
+        esp:Destroy()
+    end
+    ESPInstances = {}
+    TrackedNPCs = {}
+    cooking = false
 end)
 
--- Update scroll frame size dynamically
+-- Update scroll frame size
 UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-    local totalHeight = UIListLayout.AbsoluteContentSize.Y + 20
-    ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, totalHeight)
+    ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, UIListLayout.AbsoluteContentSize.Y + 20)
 end)
-
--- ========== OPTIMIZED MAIN LOOP ==========
-local function mainLoop()
-    -- Find NPCs (optimized with throttling)
-    findAndUpdateNPCs()
-    
-    -- Update hitboxes only when enabled
-    if not _G.Disabled and _G.NPCEnabled then
-        for character, _ in pairs(TrackedNPCs) do
-            if character and character.Parent then
-                adjustNPCHitbox(character, _G.NPCHeadSize)
-            else
-                TrackedNPCs[character] = nil
-                cachedNPCs[character] = nil
-                enemyVelocity[character] = nil
-                enemyLastPositions[character] = nil
-                enemyLastUpdate[character] = nil
-                removeNPCESP(character)
-            end
-        end
-    end
-    
-    -- Update ESP (throttled inside function)
-    updateCompactESP()
-    
-    -- Reset hitboxes when disabled
-    if _G.Disabled then
-        for character, _ in pairs(TrackedNPCs) do
-            if character and character.Parent then
-                local head = character:FindFirstChild("Head")
-                if head then
-                    head.Size = Vector3.new(2, 1, 1)
-                    head.Transparency = 0
-                    head.BrickColor = BrickColor.new("Medium stone grey")
-                    head.Material = Enum.Material.Plastic
-                    head.CanCollide = true
-                    head.Massless = false
-                end
-                
-                local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
-                if torso then
-                    torso.Size = Vector3.new(2, 2, 1)
-                    torso.Transparency = 0
-                    torso.BrickColor = BrickColor.new("Medium stone grey")
-                    torso.Material = Enum.Material.Plastic
-                    torso.CanCollide = true
-                    torso.Massless = false
-                end
-            end
-        end
-    end
-end
-
--- Run main loop at optimized rate
-local mainLoopConnection = RunService.Heartbeat:Connect(mainLoop)
 
 -- GUI Functions
 local function toggleGUI()
-    GUIVisible = not GUIVisible
-    
-    if GUIVisible then
-        MainFrame.Visible = true
-        MainFrame.Position = UDim2.new(1, -420, 0.5, -300)
-        
-        local tween = TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-            Position = UDim2.new(1, -420, 0.5, -300)
-        })
-        tween:Play()
-        
-        ToggleButton.Text = "✕"
-    else
-        MainFrame.Visible = false
-        ToggleButton.Text = "⚙"
-    end
+    MainFrame.Visible = not MainFrame.Visible
 end
 
--- GUI Interaction
-local isDragging = false
-local dragStart, frameStart
-
+-- Make GUI draggable
 TitleBar.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        isDragging = true
-        dragStart = input.Position
-        frameStart = MainFrame.Position
+        local dragStart = input.Position
+        local frameStart = MainFrame.Position
+        
+        local connection
+        connection = UserInputService.InputChanged:Connect(function(moveInput)
+            if moveInput.UserInputType == Enum.UserInputType.MouseMovement then
+                local delta = moveInput.Position - dragStart
+                MainFrame.Position = UDim2.new(
+                    frameStart.X.Scale, frameStart.X.Offset + delta.X,
+                    frameStart.Y.Scale, frameStart.Y.Offset + delta.Y
+                )
+            end
+        end)
+        
+        UserInputService.InputEnded:Connect(function(endInput)
+            if endInput.UserInputType == Enum.UserInputType.MouseButton1 then
+                connection:Disconnect()
+            end
+        end)
     end
 end)
 
-TitleBar.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        isDragging = false
-    end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if isDragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-        local delta = input.Position - dragStart
-        MainFrame.Position = UDim2.new(frameStart.X.Scale, frameStart.X.Offset + delta.X,
-                                      frameStart.Y.Scale, frameStart.Y.Offset + delta.Y)
-    end
-end)
-
--- Button Events
 CloseButton.MouseButton1Click:Connect(toggleGUI)
+
+-- Top Right Toggle Button
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Size = UDim2.new(0, 40, 0, 40)
+ToggleButton.Position = UDim2.new(1, -50, 0, 10)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+ToggleButton.BackgroundTransparency = 0.1
+ToggleButton.Text = "⚙"
+ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleButton.Font = Enum.Font.GothamBold
+ToggleButton.TextSize = 20
+ToggleButton.Parent = ScreenGui
+
 ToggleButton.MouseButton1Click:Connect(toggleGUI)
 
--- Keybinds
+-- Insert key to toggle GUI
 UserInputService.InputBegan:Connect(function(input, processed)
-    if not processed then
-        if input.KeyCode == Enum.KeyCode.RightShift then
-            _G.Disabled = not _G.Disabled
-            if toggleUpdateFunctions["Enable Hitboxes"] then
-                toggleUpdateFunctions["Enable Hitboxes"](not _G.Disabled)
-            end
-        elseif input.KeyCode == Enum.KeyCode.Insert then
-            toggleGUI()
-        end
+    if not processed and input.KeyCode == Enum.KeyCode.Insert then
+        toggleGUI()
     end
 end)
 
--- Cleanup on script end
+-- Start the main loop
+isRunning = true
+spawn(function()
+    while isRunning do
+        mainLoop()
+        wait(0.03)  -- Consistent 30 FPS update rate
+    end
+end)
+
+-- Cleanup
 game:GetService("Players").PlayerRemoving:Connect(function(player)
     if player == LocalPlayer then
-        if mainLoopConnection then
-            mainLoopConnection:Disconnect()
-        end
-        if aimbotConnection then
-            aimbotConnection:Disconnect()
-        end
-        if autoCookConnection then
-            autoCookConnection:Disconnect()
-        end
+        isRunning = false
+        resetAllHeadScales()
         ScreenGui:Destroy()
     end
 end)
 
--- Initialize
-print("Whizzbang Loaded!")
-print("Features: Class Selection, Auto Bread Cooking, Enhanced Aimbot, Movement Prediction")
-print("Press INSERT to toggle GUI")
-print("Press RightShift to toggle all features")
-print("\nClass Selection Available:")
-print("- Medic, Engineer, Rifleman, Officer, Machine Gun")
-print("\nBread Cooking Features:")
-print("- Single Auto Cook Button: Activates full process loop")
-print("- Process: Activate prompt → Equip dough → Cook → Loop")
-print("- Manual Cook: Test the process once")
+print("==========================================")
+print("Whizzbang Script - STABLE VERSION")
+print("==========================================")
+print("Press INSERT to open/close GUI")
+print("Features:")
+print("- Consistent ESP and Aimbot loop (30 FPS)")
+print("- Mini Health ESP (40x12 pixels)")
+print("- Hitbox All Enemies toggle works")
+print("- Auto Cook with 0.3s delay")
+print("- Simple and reliable")
+print("==========================================")
