@@ -490,7 +490,7 @@ local function isNPC(model)
     return true
 end
 
--- Simple head scaling
+-- Simple head scaling (VISUAL ONLY - Client Side)
 local function scaleNPCHead(npc, scaleMultiplier)
     if not npc or not npc.Parent then return end
     
@@ -506,15 +506,38 @@ local function scaleNPCHead(npc, scaleMultiplier)
         HeadScaleInstances[npc] = {
             OriginalSize = head.Size,
             OriginalMeshScale = mesh and mesh.Scale or Vector3.new(1, 1, 1),
-            Mesh = mesh
+            Mesh = mesh,
+            OriginalCFrame = head.CFrame
         }
     end
     
-    -- Apply scaling
+    -- Apply visual scaling (client-side only)
     local data = HeadScaleInstances[npc]
-    local scaleValue = scaleMultiplier / 20
-    if scaleValue < 1.5 then scaleValue = 1.5 end
+    local scaleValue = scaleMultiplier / 100
     
+    -- Create visual overlay if it doesn't exist
+    if not data.VisualOverlay then
+        local overlay = Instance.new("Part")
+        overlay.Name = "HitboxOverlay"
+        overlay.Size = head.Size * scaleValue
+        overlay.Shape = Enum.PartType.Ball
+        overlay.Transparency = 0.7
+        overlay.Color = Color3.fromRGB(255, 50, 50)
+        overlay.Material = Enum.Material.Neon
+        overlay.CanCollide = false
+        overlay.Anchored = true
+        overlay.CanQuery = false
+        overlay.Parent = npc
+        
+        data.VisualOverlay = overlay
+    end
+    
+    -- Update overlay size and position
+    local overlay = data.VisualOverlay
+    overlay.Size = head.Size * scaleValue
+    overlay.CFrame = head.CFrame
+    
+    -- Update the actual head mesh for visual consistency
     if data.Mesh and data.Mesh.Parent == head then
         data.Mesh.Scale = data.OriginalMeshScale * scaleValue
     else
@@ -532,6 +555,9 @@ local function resetNPCHead(npc)
             else
                 head.Size = data.OriginalSize
             end
+        end
+        if HeadScaleInstances[npc].VisualOverlay then
+            HeadScaleInstances[npc].VisualOverlay:Destroy()
         end
         HeadScaleInstances[npc] = nil
     end
@@ -678,7 +704,7 @@ local function getClosestNPCForGrenade()
     return closest
 end
 
--- Clean inventory for auto-throw
+-- Clean inventory for auto-throw (KEEP mill, ornamlll, and essential items)
 local function cleanInventoryForThrow()
     local character = LocalPlayer.Character
     if not character then return end
@@ -688,7 +714,8 @@ local function cleanInventoryForThrow()
         for _, item in ipairs(backpack:GetChildren()) do
             if item:IsA("Tool") then
                 local itemName = item.Name:lower()
-                if itemName ~= "mill" then
+                -- Keep grenades and essential items
+                if itemName ~= "mill" and itemName ~= "ornamlll" and itemName ~= "wire spool" then
                     item:Destroy()
                 end
             end
@@ -698,7 +725,7 @@ local function cleanInventoryForThrow()
     for _, item in ipairs(character:GetChildren()) do
         if item:IsA("Tool") then
             local itemName = item.Name:lower()
-            if itemName ~= "mill" then
+            if itemName ~= "mill" and itemName ~= "ornamlll" and itemName ~= "wire spool" then
                 item:Destroy()
             end
         end
@@ -750,7 +777,7 @@ local function smoothAim(targetPosition)
     Camera.CFrame = CFrame.new(currentPos, currentPos + newLook)
 end
 
--- Auto Throw Grenade Function
+-- Auto Throw Grenade Function (UPDATED for both mill and ornamlll)
 local function autoThrowGrenade()
     if not _G.AutoThrowGrenade then return end
     if throwingGrenade then return end
@@ -774,6 +801,7 @@ local function autoThrowGrenade()
     
     cleanInventoryForThrow()
     
+    -- Select rifleman class for grenades
     pcall(function()
         local remotePath = ReplicatedStorage:WaitForChild("RemoteEvents"):WaitForChild("Player"):WaitForChild("ChooseClass")
         remotePath:FireServer("rifle", "rifleman")
@@ -784,20 +812,41 @@ local function autoThrowGrenade()
     local backpack = LocalPlayer:FindFirstChild("Backpack")
     local grenadeTool = nil
     
+    -- Look for grenades (PRIORITIZE ornamlll, then mill)
     if backpack then
+        -- First try to find ornamlll
         for _, item in ipairs(backpack:GetChildren()) do
-            if item:IsA("Tool") and item.Name:lower() == "mill" then
+            if item:IsA("Tool") and item.Name:lower() == "ornamlll" then
                 grenadeTool = item
                 break
+            end
+        end
+        -- If no ornamlll, look for mill
+        if not grenadeTool then
+            for _, item in ipairs(backpack:GetChildren()) do
+                if item:IsA("Tool") and item.Name:lower() == "mill" then
+                    grenadeTool = item
+                    break
+                end
             end
         end
     end
     
     if not grenadeTool then
+        -- Check character for ornamlll
         for _, item in ipairs(character:GetChildren()) do
-            if item:IsA("Tool") and item.Name:lower() == "mill" then
+            if item:IsA("Tool") and item.Name:lower() == "ornamlll" then
                 grenadeTool = item
                 break
+            end
+        end
+        -- Check character for mill
+        if not grenadeTool then
+            for _, item in ipairs(character:GetChildren()) do
+                if item:IsA("Tool") and item.Name:lower() == "mill" then
+                    grenadeTool = item
+                    break
+                end
             end
         end
     end
@@ -815,16 +864,27 @@ local function autoThrowGrenade()
         grenadeTool:Activate()
         wait(0.05)
         
-        print("Threw grenade at enemy: " .. targetNPC.Name)
+        print("Auto-threw " .. grenadeTool.Name .. " at enemy: " .. targetNPC.Name)
         lastThrowTime = currentTime
     else
+        -- Request grenades (try both types)
         pcall(function()
             local grenadeRemote = ReplicatedStorage:FindFirstChild("RemoteEvents"):FindFirstChild("GetGrenade")
             if grenadeRemote then
                 grenadeRemote:FireServer()
+                print("Requested grenade via GetGrenade remote")
             end
         end)
-        print("No 'mill' grenade found, requesting more...")
+        
+        pcall(function()
+            local ornamlllRemote = ReplicatedStorage:FindFirstChild("RemoteEvents"):FindFirstChild("GetOrnamlll")
+            if ornamlllRemote then
+                ornamlllRemote:FireServer()
+                print("Requested ornamlll via GetOrnamlll remote")
+            end
+        end)
+        
+        print("No grenades found, requesting more...")
     end
     
     throwingGrenade = false
@@ -879,6 +939,18 @@ local function mainLoop()
     end
     
     updateESP()
+    
+    -- Update visual overlays for hitboxes
+    if _G.HitboxAllEnabled then
+        for npc, data in pairs(HeadScaleInstances) do
+            if npc and npc.Parent and data.VisualOverlay then
+                local head = npc:FindFirstChild("Head")
+                if head then
+                    data.VisualOverlay.CFrame = head.CFrame
+                end
+            end
+        end
+    end
     
     if _G.AimbotEnabled and LocalPlayer.Character then
         local targetNPC = getClosestNPC()
@@ -947,11 +1019,27 @@ local function cleanupInventory(keepItemName)
             if item:IsA("Tool") then
                 local itemName = item.Name:lower()
                 local keepName = keepItemName:lower()
-                if itemName ~= keepName then
-                    item:Destroy()
-                    print("Deleted item from backpack: " .. item.Name)
+                
+                -- Special handling for rifleman: keep both mill and ornamlll
+                if keepName == "mill" then
+                    if itemName ~= "mill" and itemName ~= "ornamlll" and itemName ~= "wire spool" then
+                        item:Destroy()
+                        print("Deleted non-grenade item from backpack: " .. item.Name)
+                    else
+                        print("Kept in backpack: " .. item.Name)
+                    end
+                elseif keepName == "ornamlll" then
+                    -- This handles special ornamlll requests
+                    if itemName ~= "ornamlll" and itemName ~= "mill" then
+                        item:Destroy()
+                    end
                 else
-                    print("Kept item in backpack: " .. item.Name)
+                    if itemName ~= keepName then
+                        item:Destroy()
+                        print("Deleted item from backpack: " .. item.Name)
+                    else
+                        print("Kept item in backpack: " .. item.Name)
+                    end
                 end
             end
         end
@@ -961,11 +1049,27 @@ local function cleanupInventory(keepItemName)
         if item:IsA("Tool") then
             local itemName = item.Name:lower()
             local keepName = keepItemName:lower()
-            if itemName ~= keepName then
-                item:Destroy()
-                print("Deleted item from character: " .. item.Name)
+            
+            -- Special handling for rifleman: keep both mill and ornamlll
+            if keepName == "mill" then
+                if itemName ~= "mill" and itemName ~= "ornamlll" and itemName ~= "wire spool" then
+                    item:Destroy()
+                    print("Deleted non-grenade item from character: " .. item.Name)
+                else
+                    print("Kept on character: " .. item.Name)
+                end
+            elseif keepName == "ornamlll" then
+                -- This handles special ornamlll requests
+                if itemName ~= "ornamlll" and itemName ~= "mill" then
+                    item:Destroy()
+                end
             else
-                print("Kept item on character: " .. item.Name)
+                if itemName ~= keepName then
+                    item:Destroy()
+                    print("Deleted item from character: " .. item.Name)
+                else
+                    print("Kept item on character: " .. item.Name)
+                end
             end
         end
     end
@@ -993,11 +1097,89 @@ local function selectClass(classType)
         wait(0.5)
         
         if classType == "rifleman" then
-            cleanupInventory("mill")
+            cleanupInventory("mill") -- This will keep both mill and ornamlll
+            print("Selected Rifleman - keeping mill and ornamlll grenades")
+            
+            -- Also try to get ornamlll grenade via remote
+            pcall(function()
+                wait(0.2)
+                local ornamlllRemote = ReplicatedStorage:FindFirstChild("RemoteEvents"):FindFirstChild("GetOrnamlll")
+                if ornamlllRemote then
+                    ornamlllRemote:FireServer()
+                    print("Requested ornamlll grenade after selecting rifleman")
+                end
+            end)
         elseif classType == "engineer" then
             cleanupInventory("wire spool")
         end
     end)
+end
+
+-- Function to manually equip and throw ornamlll
+local function manualThrowOrnamlll()
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then return end
+    
+    local targetNPC = getClosestNPCForGrenade()
+    if not targetNPC then 
+        notify("No NPCs found to throw grenade at!")
+        return 
+    end
+    
+    local targetHead = targetNPC:FindFirstChild("Head")
+    if not targetHead then return end
+    
+    -- Look for ornamlll in inventory
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    local ornamlllTool = nil
+    
+    if backpack then
+        for _, item in ipairs(backpack:GetChildren()) do
+            if item:IsA("Tool") and item.Name:lower() == "ornamlll" then
+                ornamlllTool = item
+                break
+            end
+        end
+    end
+    
+    if not ornamlllTool then
+        for _, item in ipairs(character:GetChildren()) do
+            if item:IsA("Tool") and item.Name:lower() == "ornamlll" then
+                ornamlllTool = item
+                break
+            end
+        end
+    end
+    
+    if ornamlllTool then
+        humanoid:EquipTool(ornamlllTool)
+        
+        local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+        if humanoidRootPart then
+            local targetPosition = targetHead.Position + Vector3.new(0, 5, 0)
+            humanoidRootPart.CFrame = CFrame.new(humanoidRootPart.Position, Vector3.new(targetPosition.X, humanoidRootPart.Position.Y, targetPosition.Z))
+        end
+        
+        wait(0.1)
+        ornamlllTool:Activate()
+        
+        notify("Threw ornamlll at enemy: " .. targetNPC.Name)
+        print("Manual throw: Threw ornamlll at " .. targetNPC.Name)
+    else
+        -- Try to get ornamlll
+        pcall(function()
+            local ornamlllRemote = ReplicatedStorage:FindFirstChild("RemoteEvents"):FindFirstChild("GetOrnamlll")
+            if ornamlllRemote then
+                ornamlllRemote:FireServer()
+                notify("No ornamlll found, requesting one...")
+            else
+                notify("No ornamlll found and no remote available!")
+            end
+        end)
+    end
 end
 
 -- GUI SETUP
@@ -1473,6 +1655,21 @@ local autoThrowDelayInput = createNumberInput("Grenade Delay (0.05-1s)", 0.05, 1
 end)
 autoThrowDelayInput.Parent = settingsScroll
 
+-- NEW: Manual Ornamlll Throw Button
+local ornamlllButton = Instance.new("TextButton")
+ornamlllButton.Size = UDim2.new(1, 0, 0, 30)
+ornamlllButton.BackgroundColor3 = Color3.fromRGB(180, 80, 220)
+ornamlllButton.BackgroundTransparency = 0.3
+ornamlllButton.Text = "THROW ORNAMILLL GRENADE"
+ornamlllButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ornamlllButton.Font = Enum.Font.GothamBold
+ornamlllButton.TextSize = 12
+ornamlllButton.Parent = settingsScroll
+
+ornamlllButton.MouseButton1Click:Connect(function()
+    manualThrowOrnamlll()
+end)
+
 -- Aimbot Toggle
 local aimbotToggle, updateAimbotToggle = createToggleButton("Aimbot", _G.AimbotEnabled, function(value)
     _G.AimbotEnabled = value
@@ -1676,6 +1873,19 @@ print("ULTRA-SMART PROMPT ACTIVATOR LOADED")
 print("==========================================")
 print("Press INSERT to open/close GUI")
 print("")
+print("KEY UPDATES:")
+print("1. ORNAMILL GRENADE SYSTEM:")
+print("   • Auto-throw prioritizes 'ornamlll' over 'mill'")
+print("   • Rifleman class keeps both grenade types in inventory")
+print("   • Added 'THROW ORNAMILLL GRENADE' button to GUI")
+print("   • Requests 'ornamlll' via GetOrnamlll remote when available")
+print("")
+print("2. CLIENT-SIDE VISUAL HITBOXES:")
+print("   • Visual overlay spheres attached to NPC heads")
+print("   • Works client-side without server access")
+print("   • Adjustable size via Head Scale slider")
+print("   • Purely visual reference for aiming")
+print("")
 print("ULTRA-SMART FEATURES:")
 print("1. ULTRA-SMART CYCLE: No repeat until all others activated")
 print("2. ACTIVATE ALL NEARBY: Fires EVERY prompt in range every 0.3s")
@@ -1684,21 +1894,22 @@ print("4. Fixed GUI layout with all settings visible")
 print("5. Force activates EVERY prompt in range")
 print("")
 print("COMBAT FEATURES:")
-print("• Auto Throw Grenade")
+print("• Auto Throw Grenade (prioritizes ornamlll)")
+print("• Manual Throw Ornamlll button")
 print("• Class Selection (Medic, Engineer, Rifleman, Officer, MG)")
 print("• Auto Cook Bread")
 print("• Aimbot with adjustable FOV and smoothness")
 print("• ESP with health bars")
-print("• NPC Head scaling (hitbox)")
+print("• Visual Hitbox Overlay System")
 print("==========================================")
 print("Smart Cycle Logic:")
 print("- Each prompt activated exactly once per cycle")
 print("- Won't repeat same prompt until all others activated")
 print("- Perfect for artillery and multi-step systems")
 print("==========================================")
-print("Activate ALL Nearby Logic:")
-print("- Fires EVERY single prompt within range")
-print("- Loops automatically every 0.3 seconds")
-print("- Works on disabled prompts")
-print("- Bypasses ALL cooldowns and restrictions")
+print("Visual Hitbox System:")
+print("- Creates transparent spheres around NPC heads")
+print("- Client-side only for visual reference")
+print("- Helps with aiming but doesn't affect server hit detection")
+print("- Can be toggled on/off in settings")
 print("==========================================")
