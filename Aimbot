@@ -1,4 +1,4 @@
--- Can you make a activate prompt automatic with this script, any prompt when toggle on will activate the prompt anything nearby loop instantly 0,3s and please just add a button to do this and do not remove anything in the gui we will just fire anything nearby and yes it loop automatic:-- Advanced Instant Interact with UI
+-- Advanced Instant Interact with UI
 if not game:IsLoaded() then game.Loaded:Wait() end
 
 local ProximityPromptService = game:GetService("ProximityPromptService")
@@ -17,7 +17,9 @@ local settings = {
     SmartActivationRange = 100, -- Range for smart activation
     SmartActivationDelay = 0.3, -- Delay between smart activations
     BypassAllRestrictions = true, -- Bypass all restrictions including cooldowns
-    SmartCycleMode = true -- NEW: Smarter cycle mode - don't repeat until all others done
+    SmartCycleMode = true, -- NEW: Smarter cycle mode - don't repeat until all others done
+    ActivateAllNearby = false, -- NEW: Activate ALL nearby prompts every 0.3s
+    ActivateAllDelay = 0.3 -- NEW: Delay between activating all nearby prompts
 }
 
 -- Smart activation variables
@@ -29,6 +31,10 @@ local currentActivationIndex = 1
 local lastPromptScan = 0
 local promptScanInterval = 0.5 -- Scan for new prompts every 0.5 seconds
 local lastActivatedPrompt = nil -- NEW: Track last activated prompt
+
+-- NEW: Activate All Nearby variables
+local activateAllRunning = false
+local activateAllThread = nil
 
 -- Create notification
 local function notify(msg)
@@ -123,7 +129,54 @@ local function getAllNearbyPrompts()
     return allPrompts
 end
 
--- NEW: Ultra-smart activation system - activates each prompt once, doesn't repeat until all others done
+-- NEW: Activate ALL nearby prompts instantly every 0.3s
+local function activateAllNearbyPrompts()
+    if not settings.ActivateAllNearby then return end
+    
+    local allPrompts = getAllNearbyPrompts()
+    local activatedCount = 0
+    
+    for _, promptData in ipairs(allPrompts) do
+        forceActivatePrompt(promptData.prompt)
+        activatedCount = activatedCount + 1
+    end
+    
+    if activatedCount > 0 then
+        print("Activated ALL " .. activatedCount .. " nearby prompts (0.3s loop)")
+    end
+end
+
+-- Start/stop the Activate All Nearby loop
+local function toggleActivateAllNearby(state)
+    settings.ActivateAllNearby = state
+    _G.ActivateAllNearby = state
+    
+    if state then
+        -- Turn off SmartAutoActivate if it's on
+        if settings.SmartAutoActivate then
+            toggleSmartActivation(false)
+        end
+        
+        activateAllRunning = true
+        
+        -- Start the loop
+        activateAllThread = game:GetService("RunService").Heartbeat:Connect(function()
+            activateAllNearbyPrompts()
+            wait(settings.ActivateAllDelay)
+        end)
+        
+        notify("Activate ALL Nearby: ON\nActivating every prompt in range every " .. settings.ActivateAllDelay .. "s")
+    else
+        activateAllRunning = false
+        if activateAllThread then
+            activateAllThread:Disconnect()
+            activateAllThread = nil
+        end
+        notify("Activate ALL Nearby: OFF")
+    end
+end
+
+-- Ultra-smart activation system - activates each prompt once, doesn't repeat until all others done
 local function ultraSmartActivatePrompts()
     if not settings.SmartAutoActivate then return end
     
@@ -247,8 +300,9 @@ local function toggleSmartActivation(state)
     _G.SmartAutoActivate = state
     
     if state then
-        if smartActivationThread then
-            smartActivationThread:Disconnect()
+        -- Turn off ActivateAllNearby if it's on
+        if settings.ActivateAllNearby then
+            toggleActivateAllNearby(false)
         end
         
         smartActivationRunning = true
@@ -365,6 +419,7 @@ print([[
 ║  • Ultra-smart cycle activation              ║
 ║  • No repeat until all others activated      ║
 ║  • Works on disabled prompts                 ║
+║  • Activate ALL nearby every 0.3s            ║
 ╚══════════════════════════════════════════════╝
 ]])
 
@@ -396,7 +451,9 @@ _G.SmartAutoActivate = settings.SmartAutoActivate
 _G.SmartActivationRange = settings.SmartActivationRange
 _G.SmartActivationDelay = settings.SmartActivationDelay
 _G.BypassAllRestrictions = settings.BypassAllRestrictions
-_G.SmartCycleMode = settings.SmartCycleMode -- NEW: Smart cycle mode
+_G.SmartCycleMode = settings.SmartCycleMode
+_G.ActivateAllNearby = settings.ActivateAllNearby
+_G.ActivateAllDelay = settings.ActivateAllDelay
 
 -- Variables
 local LocalPlayer = Players.LocalPlayer
@@ -1027,11 +1084,11 @@ local function createNumberInput(label, min, max, default, callback)
     return container
 end
 
--- Main GUI Frame (INCREASED HEIGHT for better layout)
+-- Main GUI Frame
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 320, 0, 720) -- Increased from 660 to 720
-MainFrame.Position = UDim2.new(1, -340, 0.5, -360) -- Adjusted for new height
+MainFrame.Size = UDim2.new(0, 320, 0, 750)
+MainFrame.Position = UDim2.new(1, -340, 0.5, -375)
 MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 MainFrame.BackgroundTransparency = 0.05
 MainFrame.BorderSizePixel = 0
@@ -1080,20 +1137,20 @@ ScrollFrame.Size = UDim2.new(1, 0, 1, 0)
 ScrollFrame.BackgroundTransparency = 1
 ScrollFrame.ScrollBarThickness = 8
 ScrollFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 90)
-ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 1200) -- Increased canvas size
-ScrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y -- Auto adjust
+ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 1250)
+ScrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
 ScrollFrame.Parent = ContentFrame
 
 local UIListLayout = Instance.new("UIListLayout")
-UIListLayout.Padding = UDim.new(0, 10) -- Increased padding
+UIListLayout.Padding = UDim.new(0, 10)
 UIListLayout.Parent = ScrollFrame
 
 -- Store update functions
 local toggleUpdateFunctions = {}
 
--- ULTRA-SMART PROMPT ACTIVATION SECTION (FIXED LAYOUT)
+-- ULTRA-SMART PROMPT ACTIVATION SECTION
 local promptSection = Instance.new("Frame")
-promptSection.Size = UDim2.new(1, 0, 0, 230) -- Fixed height
+promptSection.Size = UDim2.new(1, 0, 0, 260)
 promptSection.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 promptSection.Parent = ScrollFrame
 
@@ -1112,7 +1169,7 @@ local promptInfo = Instance.new("TextLabel")
 promptInfo.Size = UDim2.new(1, -10, 0, 40)
 promptInfo.Position = UDim2.new(0, 5, 0, 25)
 promptInfo.BackgroundTransparency = 1
-promptInfo.Text = "Smart cycle: No repeat until all others activated\nBypasses ALL restrictions"
+promptInfo.Text = "Smart cycle: No repeat until all others activated\nBypasses ALL restrictions\nActivate ALL: Fires every prompt in range"
 promptInfo.TextColor3 = Color3.fromRGB(200, 150, 150)
 promptInfo.Font = Enum.Font.Gotham
 promptInfo.TextSize = 10
@@ -1137,19 +1194,27 @@ smartToggle.Size = UDim2.new(1, -10, 0, 30)
 smartToggle.Position = UDim2.new(0, 5, 0, 105)
 smartToggle.Parent = promptSection
 
--- Smart Cycle Mode Toggle (NEW)
+-- NEW: Activate ALL Nearby Toggle (every 0.3s)
+local activateAllToggle, updateActivateAllToggle = createToggleButton("ACTIVATE ALL NEARBY (0.3s)", _G.ActivateAllNearby, function(value)
+    toggleActivateAllNearby(value)
+end)
+activateAllToggle.Size = UDim2.new(1, -10, 0, 30)
+activateAllToggle.Position = UDim2.new(0, 5, 0, 140)
+activateAllToggle.Parent = promptSection
+
+-- Smart Cycle Mode Toggle
 local smartCycleToggle, updateSmartCycleToggle = createToggleButton("Smart Cycle Mode", _G.SmartCycleMode, function(value)
     _G.SmartCycleMode = value
     settings.SmartCycleMode = value
 end)
 smartCycleToggle.Size = UDim2.new(1, -10, 0, 30)
-smartCycleToggle.Position = UDim2.new(0, 5, 0, 140)
+smartCycleToggle.Position = UDim2.new(0, 5, 0, 175)
 smartCycleToggle.Parent = promptSection
 
--- Create a container for range and delay inputs (side by side)
+-- Create a container for range and delay inputs
 local inputRow1 = Instance.new("Frame")
 inputRow1.Size = UDim2.new(1, -10, 0, 25)
-inputRow1.Position = UDim2.new(0, 5, 0, 175)
+inputRow1.Position = UDim2.new(0, 5, 0, 210)
 inputRow1.BackgroundTransparency = 1
 inputRow1.Parent = promptSection
 
@@ -1190,7 +1255,7 @@ end)
 -- Second row for delay input
 local inputRow2 = Instance.new("Frame")
 inputRow2.Size = UDim2.new(1, -10, 0, 25)
-inputRow2.Position = UDim2.new(0, 5, 0, 205)
+inputRow2.Position = UDim2.new(0, 5, 0, 240)
 inputRow2.BackgroundTransparency = 1
 inputRow2.Parent = promptSection
 
@@ -1231,7 +1296,7 @@ end)
 -- Manual Activate All Button
 local manualActivateButton = Instance.new("TextButton")
 manualActivateButton.Size = UDim2.new(1, -10, 0, 30)
-manualActivateButton.Position = UDim2.new(0, 5, 0, 235)
+manualActivateButton.Position = UDim2.new(0, 5, 0, 270)
 manualActivateButton.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
 manualActivateButton.BackgroundTransparency = 0.3
 manualActivateButton.Text = "FORCE ACTIVATE ALL (E KEY)"
@@ -1244,9 +1309,9 @@ manualActivateButton.MouseButton1Click:Connect(function()
     manualActivateAllPrompts()
 end)
 
--- Class Selection (COMPACT)
+-- Class Selection
 local classSection = Instance.new("Frame")
-classSection.Size = UDim2.new(1, 0, 0, 100) -- Reduced height
+classSection.Size = UDim2.new(1, 0, 0, 100)
 classSection.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 classSection.Parent = ScrollFrame
 
@@ -1296,9 +1361,9 @@ for i, classInfo in ipairs(classButtons) do
     end)
 end
 
--- Create a container for remaining settings in a more compact layout
+-- Create a container for remaining settings
 local settingsSection = Instance.new("Frame")
-settingsSection.Size = UDim2.new(1, 0, 0, 400) -- Compact height
+settingsSection.Size = UDim2.new(1, 0, 0, 400)
 settingsSection.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 settingsSection.Parent = ScrollFrame
 
@@ -1327,7 +1392,7 @@ local settingsList = Instance.new("UIListLayout")
 settingsList.Padding = UDim.new(0, 8)
 settingsList.Parent = settingsScroll
 
--- Head Size Input (compact)
+-- Head Size Input
 local hitboxSizeInput = createNumberInput("Head Scale (10-500)", 10, 500, _G.NPCHeadSize, function(value)
     _G.NPCHeadSize = value
     if _G.HitboxAllEnabled then
@@ -1402,7 +1467,7 @@ end)
 autoThrowToggle.Parent = settingsScroll
 toggleUpdateFunctions["Auto Throw Grenade"] = updateAutoThrowToggle
 
--- Auto Throw Delay Input (compact)
+-- Auto Throw Delay Input
 local autoThrowDelayInput = createNumberInput("Grenade Delay (0.05-1s)", 0.05, 1, _G.AutoThrowDelay, function(value)
     _G.AutoThrowDelay = value
 end)
@@ -1415,13 +1480,13 @@ end)
 aimbotToggle.Parent = settingsScroll
 toggleUpdateFunctions["Aimbot"] = updateAimbotToggle
 
--- Aimbot FOV Input (compact)
+-- Aimbot FOV Input
 local aimbotFOVInput = createNumberInput("Aimbot FOV (20-360)", 20, 360, _G.AimbotFOV, function(value)
     _G.AimbotFOV = value
 end)
 aimbotFOVInput.Parent = settingsScroll
 
--- Aimbot Smoothness Input (compact)
+-- Aimbot Smoothness Input
 local aimbotSmoothInput = createNumberInput("Aimbot Smoothness (0.1-1)", 0.1, 1, _G.AimbotSmoothness, function(value)
     _G.AimbotSmoothness = value
 end)
@@ -1446,7 +1511,7 @@ end)
 autoCookToggle.Parent = settingsScroll
 toggleUpdateFunctions["Auto Cook Bread"] = updateAutoCookToggle
 
--- Auto Cook Delay Input (compact)
+-- Auto Cook Delay Input
 local autoCookDelayInput = createNumberInput("Cook Delay (0.1-5s)", 0.1, 5, _G.AutoCookDelay, function(value)
     _G.AutoCookDelay = value
 end)
@@ -1497,6 +1562,8 @@ resetButton.MouseButton1Click:Connect(function()
     _G.SmartActivationDelay = 0.3
     _G.BypassAllRestrictions = true
     _G.SmartCycleMode = true
+    _G.ActivateAllNearby = false
+    _G.ActivateAllDelay = 0.3
     
     -- Reset GUI toggles
     if toggleUpdateFunctions["Enable Features"] then toggleUpdateFunctions["Enable Features"](true) end
@@ -1507,15 +1574,16 @@ resetButton.MouseButton1Click:Connect(function()
     if toggleUpdateFunctions["Aimbot"] then toggleUpdateFunctions["Aimbot"](false) end
     if toggleUpdateFunctions["Auto Shoot"] then toggleUpdateFunctions["Auto Shoot"](false) end
     if toggleUpdateFunctions["Auto Cook Bread"] then toggleUpdateFunctions["Auto Cook Bread"](false) end
-    if toggleUpdateFunctions["Smart Auto Activate"] then toggleUpdateFunctions["Smart Auto Activate"](false) end
     if toggleUpdateFunctions["Bypass All Restrictions"] then toggleUpdateFunctions["Bypass All Restrictions"](true) end
     if toggleUpdateFunctions["Smart Cycle Mode"] then toggleUpdateFunctions["Smart Cycle Mode"](true) end
+    if toggleUpdateFunctions["Activate ALL Nearby"] then toggleUpdateFunctions["Activate ALL Nearby"](false) end
     
     -- Reset text boxes
     activationRangeBox.Text = "100"
     activationDelayBox.Text = "0.3"
     
     toggleSmartActivation(false)
+    toggleActivateAllNearby(false)
     
     resetAllHeadScales()
     for npc, esp in pairs(ESPInstances) do
@@ -1597,6 +1665,7 @@ game:GetService("Players").PlayerRemoving:Connect(function(player)
     if player == LocalPlayer then
         isRunning = false
         toggleSmartActivation(false)
+        toggleActivateAllNearby(false)
         resetAllHeadScales()
         ScreenGui:Destroy()
     end
@@ -1609,13 +1678,27 @@ print("Press INSERT to open/close GUI")
 print("")
 print("ULTRA-SMART FEATURES:")
 print("1. ULTRA-SMART CYCLE: No repeat until all others activated")
-print("2. Bypasses ALL restrictions and cooldowns")
-print("3. Fixed GUI layout with all settings visible")
-print("4. Smart text boxes for range/delay (now visible!)")
+print("2. ACTIVATE ALL NEARBY: Fires EVERY prompt in range every 0.3s")
+print("3. Bypasses ALL restrictions and cooldowns")
+print("4. Fixed GUI layout with all settings visible")
 print("5. Force activates EVERY prompt in range")
+print("")
+print("COMBAT FEATURES:")
+print("• Auto Throw Grenade")
+print("• Class Selection (Medic, Engineer, Rifleman, Officer, MG)")
+print("• Auto Cook Bread")
+print("• Aimbot with adjustable FOV and smoothness")
+print("• ESP with health bars")
+print("• NPC Head scaling (hitbox)")
 print("==========================================")
 print("Smart Cycle Logic:")
 print("- Each prompt activated exactly once per cycle")
 print("- Won't repeat same prompt until all others activated")
 print("- Perfect for artillery and multi-step systems")
+print("==========================================")
+print("Activate ALL Nearby Logic:")
+print("- Fires EVERY single prompt within range")
+print("- Loops automatically every 0.3 seconds")
+print("- Works on disabled prompts")
+print("- Bypasses ALL cooldowns and restrictions")
 print("==========================================")
