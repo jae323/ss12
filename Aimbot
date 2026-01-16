@@ -19,7 +19,8 @@ local settings = {
     BypassAllRestrictions = true, -- Bypass all restrictions including cooldowns
     SmartCycleMode = true, -- NEW: Smarter cycle mode - don't repeat until all others done
     ActivateAllNearby = false, -- NEW: Activate ALL nearby prompts every 0.3s
-    ActivateAllDelay = 0.3 -- NEW: Delay between activating all nearby prompts
+    ActivateAllDelay = 0.3, -- NEW: Delay between activating all nearby prompts
+    AutoEngineering = false -- NEW: Auto Engineering feature
 }
 
 -- Smart activation variables
@@ -35,6 +36,16 @@ local lastActivatedPrompt = nil -- NEW: Track last activated prompt
 -- NEW: Activate All Nearby variables
 local activateAllRunning = false
 local activateAllThread = nil
+
+-- NEW: Auto Engineering variables
+local autoEngineeringRunning = false
+local autoEngineeringThread = nil
+local wireSpoolUses = {} -- Track wire spool uses
+local MAX_WIRE_SPOOL_USES = 6 -- Maximum uses before removing
+local lastEngineerRemoteTime = 0
+local ENGINEER_REMOTE_COOLDOWN = 1 -- Call engineer remote every 1 second
+local lastWireSpoolUseTime = 0
+local WIRE_SPOOL_COOLDOWN = 1 -- Use wire spools every 1 second
 
 -- Create notification
 local function notify(msg)
@@ -127,6 +138,171 @@ local function getAllNearbyPrompts()
     end)
     
     return allPrompts
+end
+
+-- NEW: Auto Engineering Functions - REWORKED
+local function findWireSpools()
+    local wireSpools = {}
+    local character = player.Character
+    
+    if character then
+        for _, item in ipairs(character:GetChildren()) do
+            if item:IsA("Tool") then
+                local itemName = item.Name:lower()
+                if itemName:find("wire") or itemName:find("spool") then
+                    table.insert(wireSpools, item)
+                end
+            end
+        end
+    end
+    
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then
+        for _, item in ipairs(backpack:GetChildren()) do
+            if item:IsA("Tool") then
+                local itemName = item.Name:lower()
+                if itemName:find("wire") or itemName:find("spool") then
+                    table.insert(wireSpools, item)
+                end
+            end
+        end
+    end
+    
+    return wireSpools
+end
+
+local function useWireSpools()
+    local wireSpools = findWireSpools()
+    local usedCount = 0
+    
+    for _, wireSpool in ipairs(wireSpools) do
+        if wireSpool and wireSpool.Parent then
+            local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                -- Equip the wire spool
+                humanoid:EquipTool(wireSpool)
+                
+                -- Use it instantly by clicking
+                task.wait(0.05)
+                wireSpool:Activate()
+                
+                -- Track uses
+                local toolId = tostring(wireSpool:GetDebugId())
+                wireSpoolUses[toolId] = (wireSpoolUses[toolId] or 0) + 1
+                
+                -- Remove if used 6 times
+                if wireSpoolUses[toolId] >= MAX_WIRE_SPOOL_USES then
+                    wireSpool:Destroy()
+                    wireSpoolUses[toolId] = nil
+                    print("Removed wire spool (used " .. MAX_WIRE_SPOOL_USES .. " times)")
+                end
+                
+                usedCount = usedCount + 1
+            end
+        end
+    end
+    
+    if usedCount > 0 then
+        print("Auto Engineering: Used " .. usedCount .. " wire spools")
+    end
+    
+    return usedCount
+end
+
+local function callEngineerRemote()
+    local currentTime = tick()
+    
+    -- Try to find and call engineer remote
+    local success = false
+    
+    -- First try through ReplicatedStorage
+    local rs = game:GetService("ReplicatedStorage")
+    if rs then
+        -- Look for RemoteEvents or RemoteFunctions
+        for _, remote in ipairs(rs:GetDescendants()) do
+            if remote:IsA("RemoteEvent") or remote:IsA("RemoteFunction") then
+                local remoteName = remote.Name:lower()
+                if remoteName:find("engineer") or remoteName:find("class") or remoteName:find("choose") then
+                    pcall(function()
+                        remote:FireServer("engineer")
+                        print("Called engineer remote: " .. remote.Name)
+                        success = true
+                    end)
+                end
+            end
+        end
+    end
+    
+    -- Also try through Workspace
+    for _, remote in ipairs(workspace:GetDescendants()) do
+        if remote:IsA("RemoteEvent") or remote:IsA("RemoteFunction") then
+            local remoteName = remote.Name:lower()
+            if remoteName:find("engineer") or remoteName:find("class") or remoteName:find("choose") then
+                pcall(function()
+                    remote:FireServer("engineer")
+                    print("Called engineer remote: " .. remote.Name)
+                    success = true
+                end)
+            end
+        end
+    end
+    
+    if not success then
+        -- Try to call selectClass function directly
+        pcall(function()
+            selectClass("engineer")
+            success = true
+        end)
+    end
+    
+    return success
+end
+
+local function autoEngineeringLoop()
+    while settings.AutoEngineering do
+        local currentTime = tick()
+        
+        -- Call engineer remote every second
+        if currentTime - lastEngineerRemoteTime >= ENGINEER_REMOTE_COOLDOWN then
+            callEngineerRemote()
+            lastEngineerRemoteTime = currentTime
+        end
+        
+        -- Use wire spools every second
+        if currentTime - lastWireSpoolUseTime >= WIRE_SPOOL_COOLDOWN then
+            useWireSpools()
+            lastWireSpoolUseTime = currentTime
+        end
+        
+        task.wait(0.1) -- Small delay to prevent lag
+    end
+end
+
+local function toggleAutoEngineering(state)
+    settings.AutoEngineering = state
+    _G.AutoEngineering = state
+    
+    if state then
+        -- Reset wire spool tracking
+        wireSpoolUses = {}
+        lastEngineerRemoteTime = 0
+        lastWireSpoolUseTime = 0
+        
+        -- Start the auto engineering loop
+        autoEngineeringThread = task.spawn(function()
+            autoEngineeringLoop()
+        end)
+        
+        notify("Auto Engineering: ON\nUsing engineer remote and wire spools every second")
+    else
+        -- Stop the auto engineering loop
+        if autoEngineeringThread then
+            task.cancel(autoEngineeringThread)
+            autoEngineeringThread = nil
+        end
+        
+        notify("Auto Engineering: OFF")
+    end
 end
 
 -- NEW: Activate ALL nearby prompts instantly every 0.3s
@@ -420,6 +596,7 @@ print([[
 ║  • No repeat until all others activated      ║
 ║  • Works on disabled prompts                 ║
 ║  • Activate ALL nearby every 0.3s            ║
+║  • Auto Engineering feature REWORKED         ║
 ╚══════════════════════════════════════════════╝
 ]])
 
@@ -454,6 +631,8 @@ _G.BypassAllRestrictions = settings.BypassAllRestrictions
 _G.SmartCycleMode = settings.SmartCycleMode
 _G.ActivateAllNearby = settings.ActivateAllNearby
 _G.ActivateAllDelay = settings.ActivateAllDelay
+-- Auto Engineering Settings
+_G.AutoEngineering = settings.AutoEngineering
 
 -- Variables
 local LocalPlayer = Players.LocalPlayer
@@ -1384,19 +1563,27 @@ activateAllToggle.Size = UDim2.new(1, -10, 0, 30)
 activateAllToggle.Position = UDim2.new(0, 5, 0, 140)
 activateAllToggle.Parent = promptSection
 
+-- NEW: Auto Engineering Toggle
+local autoEngineeringToggle, updateAutoEngineeringToggle = createToggleButton("AUTO ENGINEERING (1s)", _G.AutoEngineering, function(value)
+    toggleAutoEngineering(value)
+end)
+autoEngineeringToggle.Size = UDim2.new(1, -10, 0, 30)
+autoEngineeringToggle.Position = UDim2.new(0, 5, 0, 175)
+autoEngineeringToggle.Parent = promptSection
+
 -- Smart Cycle Mode Toggle
 local smartCycleToggle, updateSmartCycleToggle = createToggleButton("Smart Cycle Mode", _G.SmartCycleMode, function(value)
     _G.SmartCycleMode = value
     settings.SmartCycleMode = value
 end)
 smartCycleToggle.Size = UDim2.new(1, -10, 0, 30)
-smartCycleToggle.Position = UDim2.new(0, 5, 0, 175)
+smartCycleToggle.Position = UDim2.new(0, 5, 0, 210)
 smartCycleToggle.Parent = promptSection
 
 -- Create a container for range and delay inputs
 local inputRow1 = Instance.new("Frame")
 inputRow1.Size = UDim2.new(1, -10, 0, 25)
-inputRow1.Position = UDim2.new(0, 5, 0, 210)
+inputRow1.Position = UDim2.new(0, 5, 0, 245)
 inputRow1.BackgroundTransparency = 1
 inputRow1.Parent = promptSection
 
@@ -1437,7 +1624,7 @@ end)
 -- Second row for delay input
 local inputRow2 = Instance.new("Frame")
 inputRow2.Size = UDim2.new(1, -10, 0, 25)
-inputRow2.Position = UDim2.new(0, 5, 0, 240)
+inputRow2.Position = UDim2.new(0, 5, 0, 275)
 inputRow2.BackgroundTransparency = 1
 inputRow2.Parent = promptSection
 
@@ -1478,7 +1665,7 @@ end)
 -- Manual Activate All Button
 local manualActivateButton = Instance.new("TextButton")
 manualActivateButton.Size = UDim2.new(1, -10, 0, 30)
-manualActivateButton.Position = UDim2.new(0, 5, 0, 270)
+manualActivateButton.Position = UDim2.new(0, 5, 0, 305)
 manualActivateButton.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
 manualActivateButton.BackgroundTransparency = 0.3
 manualActivateButton.Text = "FORCE ACTIVATE ALL (E KEY)"
@@ -1761,6 +1948,7 @@ resetButton.MouseButton1Click:Connect(function()
     _G.SmartCycleMode = true
     _G.ActivateAllNearby = false
     _G.ActivateAllDelay = 0.3
+    _G.AutoEngineering = false
     
     -- Reset GUI toggles
     if toggleUpdateFunctions["Enable Features"] then toggleUpdateFunctions["Enable Features"](true) end
@@ -1774,6 +1962,7 @@ resetButton.MouseButton1Click:Connect(function()
     if toggleUpdateFunctions["Bypass All Restrictions"] then toggleUpdateFunctions["Bypass All Restrictions"](true) end
     if toggleUpdateFunctions["Smart Cycle Mode"] then toggleUpdateFunctions["Smart Cycle Mode"](true) end
     if toggleUpdateFunctions["Activate ALL Nearby"] then toggleUpdateFunctions["Activate ALL Nearby"](false) end
+    if toggleUpdateFunctions["Auto Engineering"] then toggleUpdateFunctions["Auto Engineering"](false) end
     
     -- Reset text boxes
     activationRangeBox.Text = "100"
@@ -1781,6 +1970,7 @@ resetButton.MouseButton1Click:Connect(function()
     
     toggleSmartActivation(false)
     toggleActivateAllNearby(false)
+    toggleAutoEngineering(false)
     
     resetAllHeadScales()
     for npc, esp in pairs(ESPInstances) do
@@ -1863,6 +2053,7 @@ game:GetService("Players").PlayerRemoving:Connect(function(player)
         isRunning = false
         toggleSmartActivation(false)
         toggleActivateAllNearby(false)
+        toggleAutoEngineering(false)
         resetAllHeadScales()
         ScreenGui:Destroy()
     end
@@ -1886,12 +2077,20 @@ print("   • Works client-side without server access")
 print("   • Adjustable size via Head Scale slider")
 print("   • Purely visual reference for aiming")
 print("")
+print("3. AUTO ENGINEERING FEATURE (REWORKED):")
+print("   • Uses engineer remote EVERY SECOND")
+print("   • Auto equips wire spools EVERY SECOND")
+print("   • Clicks wire spools EVERY SECOND")
+print("   • Removes wire spools after 6 uses")
+print("   • Continuous loop for maximum wire spool usage")
+print("")
 print("ULTRA-SMART FEATURES:")
 print("1. ULTRA-SMART CYCLE: No repeat until all others activated")
 print("2. ACTIVATE ALL NEARBY: Fires EVERY prompt in range every 0.3s")
 print("3. Bypasses ALL restrictions and cooldowns")
 print("4. Fixed GUI layout with all settings visible")
 print("5. Force activates EVERY prompt in range")
+print("6. AUTO ENGINEERING: Auto wire spool usage system (1s loop)")
 print("")
 print("COMBAT FEATURES:")
 print("• Auto Throw Grenade (prioritizes ornamlll)")
@@ -1912,4 +2111,12 @@ print("- Creates transparent spheres around NPC heads")
 print("- Client-side only for visual reference")
 print("- Helps with aiming but doesn't affect server hit detection")
 print("- Can be toggled on/off in settings")
+print("==========================================")
+print("Auto Engineering System (REWORKED):")
+print("- Calls engineer remote EVERY SECOND")
+print("- Auto equips ALL wire spools EVERY SECOND")
+print("- Clicks ALL wire spools EVERY SECOND")
+print("- Removes wire spools after 6 uses")
+print("- Maximum wire spool production and usage")
+print("- Continuous 1-second loop for efficiency")
 print("==========================================")
