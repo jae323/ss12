@@ -20,7 +20,8 @@ local settings = {
     SmartCycleMode = true, -- NEW: Smarter cycle mode - don't repeat until all others done
     ActivateAllNearby = false, -- NEW: Activate ALL nearby prompts every 0.3s
     ActivateAllDelay = 0.3, -- NEW: Delay between activating all nearby prompts
-    AutoEngineering = false -- NEW: Auto Engineering feature
+    AutoEngineering = false, -- NEW: Auto Engineering feature
+    AutoMedic = false -- NEW: Auto Medic feature
 }
 
 -- Smart activation variables
@@ -46,6 +47,15 @@ local lastEngineerRemoteTime = 0
 local ENGINEER_REMOTE_COOLDOWN = 1 -- Call engineer remote every 1 second
 local lastWireSpoolUseTime = 0
 local WIRE_SPOOL_COOLDOWN = 1 -- Use wire spools every 1 second
+
+-- NEW: Auto Medic variables
+local autoMedicRunning = false
+local autoMedicThread = nil
+local lastMedicHingeTime = 0
+local HINGE_EQUIP_DELAY = 0.2 -- Equip hinge every 0.2s
+local HINGE_ACTIVATE_DELAY = 0.1 -- Click hinge 0.1s after equipping
+local lastMedicRemoteTime = 0
+local MEDIC_REMOTE_COOLDOWN = 0.1 -- Call medic remote every 0.1s
 
 -- Create notification
 local function notify(msg)
@@ -138,6 +148,140 @@ local function getAllNearbyPrompts()
     end)
     
     return allPrompts
+end
+
+-- NEW: Auto Medic Functions
+local function findHingeTool()
+    local character = player.Character
+    if character then
+        for _, item in ipairs(character:GetChildren()) do
+            if item:IsA("Tool") then
+                local itemName = item.Name:lower()
+                if itemName:find("hinge") or itemName:find("medic") or itemName:find("health") then
+                    return item
+                end
+            end
+        end
+    end
+    
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then
+        for _, item in ipairs(backpack:GetChildren()) do
+            if item:IsA("Tool") then
+                local itemName = item.Name:lower()
+                if itemName:find("hinge") or itemName:find("medic") or itemName:find("health") then
+                    return item
+                end
+            end
+        end
+    end
+    
+    return nil
+end
+
+local function equipAndUseHinge()
+    local hingeTool = findHingeTool()
+    if hingeTool and hingeTool.Parent then
+        local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            -- Equip the hinge tool
+            humanoid:EquipTool(hingeTool)
+            
+            -- Wait 0.1 seconds and then click it
+            task.wait(HINGE_ACTIVATE_DELAY)
+            hingeTool:Activate()
+            
+            return true
+        end
+    end
+    return false
+end
+
+local function callMedicRemote()
+    local currentTime = tick()
+    
+    -- Try to find and call medic remote
+    local success = false
+    
+    -- First try through ReplicatedStorage
+    local rs = game:GetService("ReplicatedStorage")
+    if rs then
+        -- Look for RemoteEvents or RemoteFunctions
+        for _, remote in ipairs(rs:GetDescendants()) do
+            if remote:IsA("RemoteEvent") or remote:IsA("RemoteFunction") then
+                local remoteName = remote.Name:lower()
+                if remoteName:find("medic") or remoteName:find("heal") or remoteName:find("health") or remoteName:find("bandage") then
+                    pcall(function()
+                        remote:FireServer()
+                        print("Called medic remote: " .. remote.Name)
+                        success = true
+                    end)
+                end
+            end
+        end
+    end
+    
+    -- Also try through Workspace
+    for _, remote in ipairs(workspace:GetDescendants()) do
+        if remote:IsA("RemoteEvent") or remote:IsA("RemoteFunction") then
+            local remoteName = remote.Name:lower()
+            if remoteName:find("medic") or remoteName:find("heal") or remoteName:find("health") or remoteName:find("bandage") then
+                pcall(function()
+                    remote:FireServer()
+                    print("Called medic remote: " .. remote.Name)
+                    success = true
+                end)
+            end
+        end
+    end
+    
+    return success
+end
+
+local function autoMedicLoop()
+    while settings.AutoMedic do
+        local currentTime = tick()
+        
+        -- Equip and use hinge every 0.2 seconds
+        if currentTime - lastMedicHingeTime >= HINGE_EQUIP_DELAY then
+            equipAndUseHinge()
+            lastMedicHingeTime = currentTime
+        end
+        
+        -- Call medic remote every 0.1 seconds
+        if currentTime - lastMedicRemoteTime >= MEDIC_REMOTE_COOLDOWN then
+            callMedicRemote()
+            lastMedicRemoteTime = currentTime
+        end
+        
+        task.wait(0.05) -- Small delay to prevent lag
+    end
+end
+
+local function toggleAutoMedic(state)
+    settings.AutoMedic = state
+    _G.AutoMedic = state
+    
+    if state then
+        -- Reset medic timers
+        lastMedicHingeTime = 0
+        lastMedicRemoteTime = 0
+        
+        -- Start the auto medic loop
+        autoMedicThread = task.spawn(function()
+            autoMedicLoop()
+        end)
+        
+        notify("Auto Medic: ON\nEquipping and using hinge every 0.2s\nActivating medic remote every 0.1s")
+    else
+        -- Stop the auto medic loop
+        if autoMedicThread then
+            task.cancel(autoMedicThread)
+            autoMedicThread = nil
+        end
+        
+        notify("Auto Medic: OFF")
+    end
 end
 
 -- NEW: Auto Engineering Functions - REWORKED
@@ -597,6 +741,7 @@ print([[
 ║  • Works on disabled prompts                 ║
 ║  • Activate ALL nearby every 0.3s            ║
 ║  • Auto Engineering feature REWORKED         ║
+║  • NEW: Auto Medic feature                   ║
 ╚══════════════════════════════════════════════╝
 ]])
 
@@ -633,6 +778,8 @@ _G.ActivateAllNearby = settings.ActivateAllNearby
 _G.ActivateAllDelay = settings.ActivateAllDelay
 -- Auto Engineering Settings
 _G.AutoEngineering = settings.AutoEngineering
+-- Auto Medic Settings
+_G.AutoMedic = settings.AutoMedic
 
 -- Variables
 local LocalPlayer = Players.LocalPlayer
@@ -1511,7 +1658,7 @@ local toggleUpdateFunctions = {}
 
 -- ULTRA-SMART PROMPT ACTIVATION SECTION
 local promptSection = Instance.new("Frame")
-promptSection.Size = UDim2.new(1, 0, 0, 260)
+promptSection.Size = UDim2.new(1, 0, 0, 300)
 promptSection.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 promptSection.Parent = ScrollFrame
 
@@ -1546,6 +1693,7 @@ end)
 bypassToggle.Size = UDim2.new(1, -10, 0, 30)
 bypassToggle.Position = UDim2.new(0, 5, 0, 70)
 bypassToggle.Parent = promptSection
+toggleUpdateFunctions["Bypass All Restrictions"] = updateBypassToggle
 
 -- Smart Activation Toggle
 local smartToggle, updateSmartToggle = createToggleButton("Ultra-Smart Auto Activate", _G.SmartAutoActivate, function(value)
@@ -1554,6 +1702,7 @@ end)
 smartToggle.Size = UDim2.new(1, -10, 0, 30)
 smartToggle.Position = UDim2.new(0, 5, 0, 105)
 smartToggle.Parent = promptSection
+toggleUpdateFunctions["Ultra-Smart Auto Activate"] = updateSmartToggle
 
 -- NEW: Activate ALL Nearby Toggle (every 0.3s)
 local activateAllToggle, updateActivateAllToggle = createToggleButton("ACTIVATE ALL NEARBY (0.3s)", _G.ActivateAllNearby, function(value)
@@ -1562,6 +1711,7 @@ end)
 activateAllToggle.Size = UDim2.new(1, -10, 0, 30)
 activateAllToggle.Position = UDim2.new(0, 5, 0, 140)
 activateAllToggle.Parent = promptSection
+toggleUpdateFunctions["Activate ALL Nearby"] = updateActivateAllToggle
 
 -- NEW: Auto Engineering Toggle
 local autoEngineeringToggle, updateAutoEngineeringToggle = createToggleButton("AUTO ENGINEERING (1s)", _G.AutoEngineering, function(value)
@@ -1570,6 +1720,16 @@ end)
 autoEngineeringToggle.Size = UDim2.new(1, -10, 0, 30)
 autoEngineeringToggle.Position = UDim2.new(0, 5, 0, 175)
 autoEngineeringToggle.Parent = promptSection
+toggleUpdateFunctions["Auto Engineering"] = updateAutoEngineeringToggle
+
+-- NEW: Auto Medic Toggle
+local autoMedicToggle, updateAutoMedicToggle = createToggleButton("AUTO MEDIC (0.2s/0.1s)", _G.AutoMedic, function(value)
+    toggleAutoMedic(value)
+end)
+autoMedicToggle.Size = UDim2.new(1, -10, 0, 30)
+autoMedicToggle.Position = UDim2.new(0, 5, 0, 210)
+autoMedicToggle.Parent = promptSection
+toggleUpdateFunctions["Auto Medic"] = updateAutoMedicToggle
 
 -- Smart Cycle Mode Toggle
 local smartCycleToggle, updateSmartCycleToggle = createToggleButton("Smart Cycle Mode", _G.SmartCycleMode, function(value)
@@ -1577,13 +1737,14 @@ local smartCycleToggle, updateSmartCycleToggle = createToggleButton("Smart Cycle
     settings.SmartCycleMode = value
 end)
 smartCycleToggle.Size = UDim2.new(1, -10, 0, 30)
-smartCycleToggle.Position = UDim2.new(0, 5, 0, 210)
+smartCycleToggle.Position = UDim2.new(0, 5, 0, 245)
 smartCycleToggle.Parent = promptSection
+toggleUpdateFunctions["Smart Cycle Mode"] = updateSmartCycleToggle
 
 -- Create a container for range and delay inputs
 local inputRow1 = Instance.new("Frame")
 inputRow1.Size = UDim2.new(1, -10, 0, 25)
-inputRow1.Position = UDim2.new(0, 5, 0, 245)
+inputRow1.Position = UDim2.new(0, 5, 0, 280)
 inputRow1.BackgroundTransparency = 1
 inputRow1.Parent = promptSection
 
@@ -1624,7 +1785,7 @@ end)
 -- Second row for delay input
 local inputRow2 = Instance.new("Frame")
 inputRow2.Size = UDim2.new(1, -10, 0, 25)
-inputRow2.Position = UDim2.new(0, 5, 0, 275)
+inputRow2.Position = UDim2.new(0, 5, 0, 310)
 inputRow2.BackgroundTransparency = 1
 inputRow2.Parent = promptSection
 
@@ -1665,7 +1826,7 @@ end)
 -- Manual Activate All Button
 local manualActivateButton = Instance.new("TextButton")
 manualActivateButton.Size = UDim2.new(1, -10, 0, 30)
-manualActivateButton.Position = UDim2.new(0, 5, 0, 305)
+manualActivateButton.Position = UDim2.new(0, 5, 0, 340)
 manualActivateButton.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
 manualActivateButton.BackgroundTransparency = 0.3
 manualActivateButton.Text = "FORCE ACTIVATE ALL (E KEY)"
@@ -1949,6 +2110,7 @@ resetButton.MouseButton1Click:Connect(function()
     _G.ActivateAllNearby = false
     _G.ActivateAllDelay = 0.3
     _G.AutoEngineering = false
+    _G.AutoMedic = false
     
     -- Reset GUI toggles
     if toggleUpdateFunctions["Enable Features"] then toggleUpdateFunctions["Enable Features"](true) end
@@ -1963,6 +2125,7 @@ resetButton.MouseButton1Click:Connect(function()
     if toggleUpdateFunctions["Smart Cycle Mode"] then toggleUpdateFunctions["Smart Cycle Mode"](true) end
     if toggleUpdateFunctions["Activate ALL Nearby"] then toggleUpdateFunctions["Activate ALL Nearby"](false) end
     if toggleUpdateFunctions["Auto Engineering"] then toggleUpdateFunctions["Auto Engineering"](false) end
+    if toggleUpdateFunctions["Auto Medic"] then toggleUpdateFunctions["Auto Medic"](false) end
     
     -- Reset text boxes
     activationRangeBox.Text = "100"
@@ -1971,6 +2134,7 @@ resetButton.MouseButton1Click:Connect(function()
     toggleSmartActivation(false)
     toggleActivateAllNearby(false)
     toggleAutoEngineering(false)
+    toggleAutoMedic(false)
     
     resetAllHeadScales()
     for npc, esp in pairs(ESPInstances) do
@@ -2054,6 +2218,7 @@ game:GetService("Players").PlayerRemoving:Connect(function(player)
         toggleSmartActivation(false)
         toggleActivateAllNearby(false)
         toggleAutoEngineering(false)
+        toggleAutoMedic(false)
         resetAllHeadScales()
         ScreenGui:Destroy()
     end
@@ -2065,19 +2230,25 @@ print("==========================================")
 print("Press INSERT to open/close GUI")
 print("")
 print("KEY UPDATES:")
-print("1. ORNAMILL GRENADE SYSTEM:")
+print("1. AUTO MEDIC FEATURE ADDED:")
+print("   • Equips hinge/medic tool every 0.2s")
+print("   • Clicks hinge 0.1s after equipping")
+print("   • Activates medic remote every 0.1s")
+print("   • Toggle button in Prompt Activation section")
+print("")
+print("2. ORNAMILL GRENADE SYSTEM:")
 print("   • Auto-throw prioritizes 'ornamlll' over 'mill'")
 print("   • Rifleman class keeps both grenade types in inventory")
 print("   • Added 'THROW ORNAMILLL GRENADE' button to GUI")
 print("   • Requests 'ornamlll' via GetOrnamlll remote when available")
 print("")
-print("2. CLIENT-SIDE VISUAL HITBOXES:")
+print("3. CLIENT-SIDE VISUAL HITBOXES:")
 print("   • Visual overlay spheres attached to NPC heads")
 print("   • Works client-side without server access")
 print("   • Adjustable size via Head Scale slider")
 print("   • Purely visual reference for aiming")
 print("")
-print("3. AUTO ENGINEERING FEATURE (REWORKED):")
+print("4. AUTO ENGINEERING FEATURE (REWORKED):")
 print("   • Uses engineer remote EVERY SECOND")
 print("   • Auto equips wire spools EVERY SECOND")
 print("   • Clicks wire spools EVERY SECOND")
@@ -2091,6 +2262,7 @@ print("3. Bypasses ALL restrictions and cooldowns")
 print("4. Fixed GUI layout with all settings visible")
 print("5. Force activates EVERY prompt in range")
 print("6. AUTO ENGINEERING: Auto wire spool usage system (1s loop)")
+print("7. AUTO MEDIC: Auto hinge usage system (0.2s/0.1s loop)")
 print("")
 print("COMBAT FEATURES:")
 print("• Auto Throw Grenade (prioritizes ornamlll)")
@@ -2101,10 +2273,11 @@ print("• Aimbot with adjustable FOV and smoothness")
 print("• ESP with health bars")
 print("• Visual Hitbox Overlay System")
 print("==========================================")
-print("Smart Cycle Logic:")
-print("- Each prompt activated exactly once per cycle")
-print("- Won't repeat same prompt until all others activated")
-print("- Perfect for artillery and multi-step systems")
+print("Auto Medic System:")
+print("- Equips hinge/medic tool every 0.2 seconds")
+print("- Clicks hinge 0.1 seconds after equipping")
+print("- Activates medic healing remote every 0.1 seconds")
+print("- Continuous loop for maximum healing efficiency")
 print("==========================================")
 print("Visual Hitbox System:")
 print("- Creates transparent spheres around NPC heads")
