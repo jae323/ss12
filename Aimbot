@@ -1,4 +1,3 @@
--- Advanced Instant Interact with UI
 if not game:IsLoaded() then game.Loaded:Wait() end
 
 local ProximityPromptService = game:GetService("ProximityPromptService")
@@ -1030,18 +1029,32 @@ local function getClosestNPCForGrenade()
     return closest
 end
 
--- Clean inventory for auto-throw (KEEP mill, ornamlll, and essential items)
+-- Clean inventory for auto-throw (KEEP mill, ornamlll, and essential items) - UPDATED
 local function cleanInventoryForThrow()
     local character = LocalPlayer.Character
     if not character then return end
+    
+    -- List of items to keep (case insensitive)
+    local itemsToKeep = {
+        "mill", "ornamlll", "ornamill", "Ornamill", "Ornamlll",
+        "wire spool", "hinge", "medic", "health"
+    }
     
     local backpack = LocalPlayer:FindFirstChild("Backpack")
     if backpack then
         for _, item in ipairs(backpack:GetChildren()) do
             if item:IsA("Tool") then
                 local itemName = item.Name:lower()
-                -- Keep grenades and essential items
-                if itemName ~= "mill" and itemName ~= "ornamlll" and itemName ~= "wire spool" then
+                local shouldKeep = false
+                
+                for _, keepName in ipairs(itemsToKeep) do
+                    if itemName == keepName:lower() or itemName:find(keepName:lower()) then
+                        shouldKeep = true
+                        break
+                    end
+                end
+                
+                if not shouldKeep then
                     item:Destroy()
                 end
             end
@@ -1051,7 +1064,16 @@ local function cleanInventoryForThrow()
     for _, item in ipairs(character:GetChildren()) do
         if item:IsA("Tool") then
             local itemName = item.Name:lower()
-            if itemName ~= "mill" and itemName ~= "ornamlll" and itemName ~= "wire spool" then
+            local shouldKeep = false
+            
+            for _, keepName in ipairs(itemsToKeep) do
+                if itemName == keepName:lower() or itemName:find(keepName:lower()) then
+                    shouldKeep = true
+                    break
+                end
+            end
+            
+            if not shouldKeep then
                 item:Destroy()
             end
         end
@@ -1103,7 +1125,7 @@ local function smoothAim(targetPosition)
     Camera.CFrame = CFrame.new(currentPos, currentPos + newLook)
 end
 
--- Auto Throw Grenade Function (UPDATED for both mill and ornamlll)
+-- Auto Throw Grenade Function - UPDATED to properly check for Ornamill/ornamlll
 local function autoThrowGrenade()
     if not _G.AutoThrowGrenade then return end
     if throwingGrenade then return end
@@ -1138,46 +1160,40 @@ local function autoThrowGrenade()
     local backpack = LocalPlayer:FindFirstChild("Backpack")
     local grenadeTool = nil
     
-    -- Look for grenades (PRIORITIZE ornamlll, then mill)
+    -- Look for grenades - PRIORITIZE Ornamill/ornamlll first
+    local grenadeNamesToCheck = {"ornamlll", "ornamill", "Ornamill", "Ornamlll", "mill", "Mill"}
+    
+    -- Check backpack first
     if backpack then
-        -- First try to find ornamlll
-        for _, item in ipairs(backpack:GetChildren()) do
-            if item:IsA("Tool") and item.Name:lower() == "ornamlll" then
-                grenadeTool = item
-                break
-            end
-        end
-        -- If no ornamlll, look for mill
-        if not grenadeTool then
+        for _, grenadeName in ipairs(grenadeNamesToCheck) do
             for _, item in ipairs(backpack:GetChildren()) do
-                if item:IsA("Tool") and item.Name:lower() == "mill" then
+                if item:IsA("Tool") and item.Name:lower() == grenadeName:lower() then
                     grenadeTool = item
                     break
                 end
             end
+            if grenadeTool then break end
         end
     end
     
+    -- Check character if not found in backpack
     if not grenadeTool then
-        -- Check character for ornamlll
         for _, item in ipairs(character:GetChildren()) do
-            if item:IsA("Tool") and item.Name:lower() == "ornamlll" then
-                grenadeTool = item
-                break
-            end
-        end
-        -- Check character for mill
-        if not grenadeTool then
-            for _, item in ipairs(character:GetChildren()) do
-                if item:IsA("Tool") and item.Name:lower() == "mill" then
-                    grenadeTool = item
-                    break
+            if item:IsA("Tool") then
+                local itemName = item.Name:lower()
+                for _, grenadeName in ipairs(grenadeNamesToCheck) do
+                    if itemName == grenadeName:lower() then
+                        grenadeTool = item
+                        break
+                    end
                 end
+                if grenadeTool then break end
             end
         end
     end
     
     if grenadeTool then
+        -- Equip the grenade
         humanoid:EquipTool(grenadeTool)
         
         local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
@@ -1187,13 +1203,27 @@ local function autoThrowGrenade()
         end
         
         wait(0.05)
+        
+        -- Click to use the grenade
         grenadeTool:Activate()
         wait(0.05)
         
         print("Auto-threw " .. grenadeTool.Name .. " at enemy: " .. targetNPC.Name)
         lastThrowTime = currentTime
+        
+        -- If it's a mill, request ornamlll too
+        if grenadeTool.Name:lower() == "mill" then
+            pcall(function()
+                wait(0.2)
+                local ornamlllRemote = ReplicatedStorage:FindFirstChild("RemoteEvents"):FindFirstChild("GetOrnamlll")
+                if ornamlllRemote then
+                    ornamlllRemote:FireServer()
+                    print("Requested ornamlll grenade after throwing mill")
+                end
+            end)
+        end
     else
-        -- Request grenades (try both types)
+        -- Request both types of grenades
         pcall(function()
             local grenadeRemote = ReplicatedStorage:FindFirstChild("RemoteEvents"):FindFirstChild("GetGrenade")
             if grenadeRemote then
@@ -1348,7 +1378,7 @@ local function cleanupInventory(keepItemName)
                 
                 -- Special handling for rifleman: keep both mill and ornamlll
                 if keepName == "mill" then
-                    if itemName ~= "mill" and itemName ~= "ornamlll" and itemName ~= "wire spool" then
+                    if itemName ~= "mill" and itemName ~= "ornamlll" and itemName ~= "ornamill" and itemName ~= "wire spool" then
                         item:Destroy()
                         print("Deleted non-grenade item from backpack: " .. item.Name)
                     else
@@ -1356,7 +1386,7 @@ local function cleanupInventory(keepItemName)
                     end
                 elseif keepName == "ornamlll" then
                     -- This handles special ornamlll requests
-                    if itemName ~= "ornamlll" and itemName ~= "mill" then
+                    if itemName ~= "ornamlll" and itemName ~= "ornamill" and itemName ~= "mill" then
                         item:Destroy()
                     end
                 else
@@ -1378,7 +1408,7 @@ local function cleanupInventory(keepItemName)
             
             -- Special handling for rifleman: keep both mill and ornamlll
             if keepName == "mill" then
-                if itemName ~= "mill" and itemName ~= "ornamlll" and itemName ~= "wire spool" then
+                if itemName ~= "mill" and itemName ~= "ornamlll" and itemName ~= "ornamill" and itemName ~= "wire spool" then
                     item:Destroy()
                     print("Deleted non-grenade item from character: " .. item.Name)
                 else
@@ -1386,7 +1416,7 @@ local function cleanupInventory(keepItemName)
                 end
             elseif keepName == "ornamlll" then
                 -- This handles special ornamlll requests
-                if itemName ~= "ornamlll" and itemName ~= "mill" then
+                if itemName ~= "ornamlll" and itemName ~= "ornamill" and itemName ~= "mill" then
                     item:Destroy()
                 end
             else
@@ -1441,7 +1471,68 @@ local function selectClass(classType)
     end)
 end
 
--- Function to manually equip and throw ornamlll
+-- NEW: Function to specifically find and use Ornamill
+local function findAndUseOrnamill()
+    local character = LocalPlayer.Character
+    if not character then return false end
+    
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then return false end
+    
+    -- Look for Ornamill/ornamlll
+    local ornamillTool = nil
+    local ornamillNames = {"ornamlll", "ornamill", "Ornamill", "Ornamlll"}
+    
+    -- Check backpack
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    if backpack then
+        for _, item in ipairs(backpack:GetChildren()) do
+            if item:IsA("Tool") then
+                local itemName = item.Name:lower()
+                for _, ornamillName in ipairs(ornamillNames) do
+                    if itemName == ornamillName:lower() then
+                        ornamillTool = item
+                        break
+                    end
+                end
+                if ornamillTool then break end
+            end
+        end
+    end
+    
+    -- Check character
+    if not ornamillTool then
+        for _, item in ipairs(character:GetChildren()) do
+            if item:IsA("Tool") then
+                local itemName = item.Name:lower()
+                for _, ornamillName in ipairs(ornamillNames) do
+                    if itemName == ornamillName:lower() then
+                        ornamillTool = item
+                        break
+                    end
+                end
+                if ornamillTool then break end
+            end
+        end
+    end
+    
+    if ornamillTool then
+        -- Equip it
+        humanoid:EquipTool(ornamillTool)
+        wait(0.05)
+        
+        -- Use it (click)
+        ornamillTool:Activate()
+        wait(0.05)
+        
+        print("Used Ornamill grenade: " .. ornamillTool.Name)
+        return true
+    end
+    
+    return false
+end
+
+-- Update the manual throw function for Ornamill
 local function manualThrowOrnamlll()
     local character = LocalPlayer.Character
     if not character then return end
@@ -1451,37 +1542,55 @@ local function manualThrowOrnamlll()
     
     local targetNPC = getClosestNPCForGrenade()
     if not targetNPC then 
-        notify("No NPCs found to throw grenade at!")
+        -- Just use it without target if no NPCs found
+        if findAndUseOrnamill() then
+            notify("Used Ornamill grenade!")
+        else
+            notify("No Ornamill found!")
+        end
         return 
     end
     
     local targetHead = targetNPC:FindFirstChild("Head")
     if not targetHead then return end
     
-    -- Look for ornamlll in inventory
-    local backpack = LocalPlayer:FindFirstChild("Backpack")
-    local ornamlllTool = nil
+    -- Look for ornamill in inventory
+    local ornamillTool = nil
+    local ornamillNames = {"ornamlll", "ornamill", "Ornamill", "Ornamlll"}
     
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
     if backpack then
         for _, item in ipairs(backpack:GetChildren()) do
-            if item:IsA("Tool") and item.Name:lower() == "ornamlll" then
-                ornamlllTool = item
-                break
+            if item:IsA("Tool") then
+                local itemName = item.Name:lower()
+                for _, ornamillName in ipairs(ornamillNames) do
+                    if itemName == ornamillName:lower() then
+                        ornamillTool = item
+                        break
+                    end
+                end
+                if ornamillTool then break end
             end
         end
     end
     
-    if not ornamlllTool then
+    if not ornamillTool then
         for _, item in ipairs(character:GetChildren()) do
-            if item:IsA("Tool") and item.Name:lower() == "ornamlll" then
-                ornamlllTool = item
-                break
+            if item:IsA("Tool") then
+                local itemName = item.Name:lower()
+                for _, ornamillName in ipairs(ornamillNames) do
+                    if itemName == ornamillName:lower() then
+                        ornamillTool = item
+                        break
+                    end
+                end
+                if ornamillTool then break end
             end
         end
     end
     
-    if ornamlllTool then
-        humanoid:EquipTool(ornamlllTool)
+    if ornamillTool then
+        humanoid:EquipTool(ornamillTool)
         
         local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
         if humanoidRootPart then
@@ -1490,19 +1599,19 @@ local function manualThrowOrnamlll()
         end
         
         wait(0.1)
-        ornamlllTool:Activate()
+        ornamillTool:Activate()
         
-        notify("Threw ornamlll at enemy: " .. targetNPC.Name)
-        print("Manual throw: Threw ornamlll at " .. targetNPC.Name)
+        notify("Threw Ornamill at enemy: " .. targetNPC.Name)
+        print("Manual throw: Threw Ornamill at " .. targetNPC.Name)
     else
-        -- Try to get ornamlll
+        -- Try to get ornamill
         pcall(function()
             local ornamlllRemote = ReplicatedStorage:FindFirstChild("RemoteEvents"):FindFirstChild("GetOrnamlll")
             if ornamlllRemote then
                 ornamlllRemote:FireServer()
-                notify("No ornamlll found, requesting one...")
+                notify("No Ornamill found, requesting one...")
             else
-                notify("No ornamlll found and no remote available!")
+                notify("No Ornamill found and no remote available!")
             end
         end)
     end
@@ -1992,6 +2101,9 @@ local autoThrowToggle, updateAutoThrowToggle = createToggleButton("Auto Throw Gr
     _G.AutoThrowGrenade = value
     if value then
         startAutoThrow()
+        notify("Auto Throw Grenade: ON\nWill use both Mill and Ornamill grenades")
+    else
+        notify("Auto Throw Grenade: OFF")
     end
 end)
 autoThrowToggle.Parent = settingsScroll
@@ -2003,18 +2115,18 @@ local autoThrowDelayInput = createNumberInput("Grenade Delay (0.05-1s)", 0.05, 1
 end)
 autoThrowDelayInput.Parent = settingsScroll
 
--- NEW: Manual Ornamlll Throw Button
-local ornamlllButton = Instance.new("TextButton")
-ornamlllButton.Size = UDim2.new(1, 0, 0, 30)
-ornamlllButton.BackgroundColor3 = Color3.fromRGB(180, 80, 220)
-ornamlllButton.BackgroundTransparency = 0.3
-ornamlllButton.Text = "THROW ORNAMILLL GRENADE"
-ornamlllButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-ornamlllButton.Font = Enum.Font.GothamBold
-ornamlllButton.TextSize = 12
-ornamlllButton.Parent = settingsScroll
+-- NEW: Manual Ornamill Throw Button
+local ornamillButton = Instance.new("TextButton")
+ornamillButton.Size = UDim2.new(1, 0, 0, 30)
+ornamillButton.BackgroundColor3 = Color3.fromRGB(180, 80, 220)
+ornamillButton.BackgroundTransparency = 0.3
+ornamillButton.Text = "THROW ORNAMILL GRENADE"
+ornamillButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ornamillButton.Font = Enum.Font.GothamBold
+ornamillButton.TextSize = 12
+ornamillButton.Parent = settingsScroll
 
-ornamlllButton.MouseButton1Click:Connect(function()
+ornamillButton.MouseButton1Click:Connect(function()
     manualThrowOrnamlll()
 end)
 
@@ -2236,10 +2348,11 @@ print("   • Clicks hinge 0.1s after equipping")
 print("   • Activates medic remote every 0.1s")
 print("   • Toggle button in Prompt Activation section")
 print("")
-print("2. ORNAMILL GRENADE SYSTEM:")
-print("   • Auto-throw prioritizes 'ornamlll' over 'mill'")
-print("   • Rifleman class keeps both grenade types in inventory")
-print("   • Added 'THROW ORNAMILLL GRENADE' button to GUI")
+print("2. ORNAMILL GRENADE SYSTEM (FIXED):")
+print("   • Auto-throw prioritizes 'Ornamill' (all variations)")
+print("   • Checks for: ornamlll, ornamill, Ornamill, Ornamlll, mill, Mill")
+print("   • Inventory cleaning keeps all grenade types")
+print("   • Added 'THROW ORNAMILL GRENADE' button to GUI")
 print("   • Requests 'ornamlll' via GetOrnamlll remote when available")
 print("")
 print("3. CLIENT-SIDE VISUAL HITBOXES:")
@@ -2265,8 +2378,8 @@ print("6. AUTO ENGINEERING: Auto wire spool usage system (1s loop)")
 print("7. AUTO MEDIC: Auto hinge usage system (0.2s/0.1s loop)")
 print("")
 print("COMBAT FEATURES:")
-print("• Auto Throw Grenade (prioritizes ornamlll)")
-print("• Manual Throw Ornamlll button")
+print("• Auto Throw Grenade (prioritizes Ornamill)")
+print("• Manual Throw Ornamill button")
 print("• Class Selection (Medic, Engineer, Rifleman, Officer, MG)")
 print("• Auto Cook Bread")
 print("• Aimbot with adjustable FOV and smoothness")
